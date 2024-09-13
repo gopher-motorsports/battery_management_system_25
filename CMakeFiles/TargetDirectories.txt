@@ -1,0 +1,5 @@
+C:/Users/sabri/Projects/MotorSport/Go4-25e/battery_management_system_25/CMakeFiles/battery_management_system_25.dir
+C:/Users/sabri/Projects/MotorSport/Go4-25e/battery_management_system_25/CMakeFiles/edit_cache.dir
+C:/Users/sabri/Projects/MotorSport/Go4-25e/battery_management_system_25/CMakeFiles/rebuild_cache.dir
+C:/Users/sabri/Projects/MotorSport/Go4-25e/battery_management_system_25/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+C:/Users/sabri/Projects/MotorSport/Go4-25e/battery_management_system_25/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
