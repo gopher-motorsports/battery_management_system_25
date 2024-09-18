@@ -5,6 +5,8 @@
 #include "spi.h"
 #include "main.h"
 
+#include <string.h>
+
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -46,14 +48,6 @@ extern SPI_HandleTypeDef hspi1;
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES ========================= */
 /* ==================================================================== */
-
-typedef enum
-{
-    PORTA = 0,
-    PORTB,
-    NUM_PORTS
-} PORT_E;
-
 
 /* ==================================================================== */
 /* ============================== STRUCTS============================== */
@@ -120,9 +114,9 @@ static void openPort(PORT_E port);
 static void closePort(PORT_E port);
 static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes);
 static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t commandCounter);
-static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port);
-static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuffer, PORT_E port);
-static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuffer, PORT_E port);
+// static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port);
+// static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuffer, PORT_E port);
+// static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuffer, PORT_E port);
 
 
 /* ==================================================================== */
@@ -202,7 +196,7 @@ static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t com
     return crc;
 }
 
-static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port)
+TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port)
 {
     // Size in bytes: Command Word(2) + Command CRC(2)
     uint32_t packetLength = COMMAND_PACKET_LENGTH;
@@ -240,7 +234,7 @@ static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT
     return TRANSACTION_SUCCESS;
 }
 
-static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuff, PORT_E port)
+TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuff, PORT_E port)
 {
     // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numBmbs
     uint32_t packetLength = COMMAND_PACKET_LENGTH + (numBmbs * REGISTER_PACKET_LENGTH);
@@ -290,7 +284,7 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, ui
     return TRANSACTION_SUCCESS;
 }
 
-static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuff, PORT_E port)
+TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuff, PORT_E port)
 {
     // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numBmbs
     uint32_t packetLength = COMMAND_PACKET_LENGTH + (numBmbs * REGISTER_PACKET_LENGTH);

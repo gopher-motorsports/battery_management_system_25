@@ -31,6 +31,10 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "telemetryTask.h"
+
+#define TELEMETRY_TASK_PERIOD_MS  100
+#define PRINT_TASK_PERIOD_MS      1000
 
 /* USER CODE END Includes */
 
@@ -69,6 +73,8 @@ void Error_Handler(void);
 #define PORTB_CS_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
+
+extern TelemetryTaskOutputData_S telemetryTaskOutputData;
 
 /* USER CODE END Private defines */
 

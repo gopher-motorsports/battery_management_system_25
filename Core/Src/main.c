@@ -19,10 +19,11 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "spi.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "spi.h"
+#include "printTask.h"
 
 /* USER CODE END Includes */
 
@@ -47,7 +48,12 @@ SPI_HandleTypeDef hspi1;
 osThreadId telemetryTaskHandle;
 uint32_t telemetryTaskBuffer[ 2048 ];
 osStaticThreadDef_t telemetryControlTaskBlock;
+osThreadId printTaskHandle;
+uint32_t printTaskBuffer[ 2048 ];
+osStaticThreadDef_t printTaskControlBlock;
 /* USER CODE BEGIN PV */
+
+TelemetryTaskOutputData_S telemetryTaskOutputData;
 
 /* USER CODE END PV */
 
@@ -56,6 +62,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 void startTelemetryTask(void const * argument);
+void startPrintTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -145,6 +152,10 @@ int main(void)
   /* definition and creation of telemetryTask */
   osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 2048, telemetryTaskBuffer, &telemetryControlTaskBlock);
   telemetryTaskHandle = osThreadCreate(osThread(telemetryTask), NULL);
+
+  /* definition and creation of printTask */
+  osThreadStaticDef(printTask, startPrintTask, osPriorityLow, 0, 2048, printTaskBuffer, &printTaskControlBlock);
+  printTaskHandle = osThreadCreate(osThread(printTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -304,12 +315,61 @@ static void MX_GPIO_Init(void)
 void startTelemetryTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
+  // initTelemetryTask();
+  // TickType_t lastTelemetryTaskTick = HAL_GetTick();
+  // const TickType_t telemetryTaskPeriod = pdMS_TO_TICKS(TELEMETRY_TASK_PERIOD_MS);
+
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    // runTelemetryTask();
+    // vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_startPrintTask */
+/**
+* @brief Function implementing the printTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startPrintTask */
+void startPrintTask(void const * argument)
+{
+  /* USER CODE BEGIN startPrintTask */
+  initPrintTask();
+  // TickType_t lastPrintTaskTick = HAL_GetTick();
+  // const TickType_t printTaskPeriod = pdMS_TO_TICKS(PRINT_TASK_PERIOD_MS);
+
+  /* Infinite loop */
+  for(;;)
+  {
+    // runPrintTask();
+    // vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
+  }
+  /* USER CODE END startPrintTask */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM6) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
 }
 
 /**
