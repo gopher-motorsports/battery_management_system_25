@@ -1,11 +1,8 @@
-ADBMS.C
-
-
-
 /* ==================================================================== */
 /* ============================= INCLUDES ============================= */
 /* ==================================================================== */
 #include "adbms.h"
+#include "main.h"
 
 
 /* ==================================================================== */
@@ -47,6 +44,12 @@ ADBMS.C
 /* ========================= ENUMERATED TYPES ========================= */
 /* ==================================================================== */
 
+typedef enum
+{
+    PORTA = 0,
+    PORTB,
+    NUM_PORTS
+} PORT_E;
 
 
 /* ==================================================================== */
@@ -108,7 +111,88 @@ uint16_t dataCrcTable[CRC_LUT_SIZE] =
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
+static void openPort(PORT_E port);
+static void closePort(PORT_E port);
+static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes);
+static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t commandCounter);
+static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port);
+static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuffer, PORT_E port);
+static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuffer, PORT_E port);
+
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
+
+static void openPort(PORT_E port)
+{
+    if(port == PORTA)
+    {        
+        HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_RESET);
+    }
+    else if(port == PORTB)
+    {   
+        HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_RESET);
+    }
+}
+
+static void closePort(PORT_E port)
+{
+    if(port == PORTA)
+    {        
+        HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
+    }
+    else if(port == PORTB)
+    {
+        HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_SET);
+    }
+}
+
+
+static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes)
+{
+    // Begin crc calculation with intial value
+    uint16_t crc = CRC_CMD_SEED;
+
+    // For each byte of data, use lookup table to efficiently calculate crc
+    for(int32_t i = 0; i < numBytes; i++)
+    {
+        // Determine the next look up table index from the current crc and next data byte
+        uint8_t index = (uint8_t)((crc >> (CRC_CMD_SIZE - BITS_IN_BYTE)) ^ packet[i]);
+        
+        // Calculate the next intermediate crc from the current crc and look up table
+        crc = ((crc << BITS_IN_BYTE) ^ (uint16_t)(commandCrcTable[index]));
+    }
+
+    return crc;
+}
+
+static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t commandCounter)
+{
+    // Begin crc calculation with intial value
+    uint16_t crc = CRC_DATA_SEED;
+
+    // For each byte of data, use lookup table to efficiently calculate crc
+    for(int32_t i = 0; i < numBytes; i++)
+    {
+        // Determine the next look up table index from the current crc and next data byte
+        uint8_t index = (uint8_t)((crc >> (CRC_DATA_SIZE - BITS_IN_BYTE)) ^ packet[i]);
+        
+        // Calculate the next intermediate crc from the current crc and look up table
+        crc = ((crc << BITS_IN_BYTE) ^ (uint16_t)(dataCrcTable[index]));
+    }
+
+    // Clear bit shift residue
+    crc &= 0x03FF;
+
+    // Determine the next look up table index from the current crc and next data byte
+    uint8_t index = (uint8_t)((crc >> (CRC_DATA_SIZE - COMMAND_COUNTER_BITS)) ^ commandCounter);
+    
+    // Calculate the next intermediate crc from the current crc and look up table
+    crc = ((crc << COMMAND_COUNTER_BITS) ^ (uint16_t)(dataCrcTable[index]));
+
+    // Clear bit shift residue
+    crc &= 0x03FF;
+
+    return crc;
+}
