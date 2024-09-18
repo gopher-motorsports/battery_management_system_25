@@ -1,6 +1,3 @@
-SPI.H 
-
-
 #ifndef SPI_H_
 #define SPI_H_
 
@@ -58,7 +55,7 @@ typedef enum
         continue; \
       } \
       /* Wait for SPI interrupt to occur. NotificationFlags will hold notification value indicating status of transaction */ \
-      if (xTaskNotifyWait(TASK_NO_OP, TASK_CLEAR_FLAGS, &notificationFlags, timeout) != pdTRUE) \
+      if (!xTaskNotifyWait(TASK_NO_OP, TASK_CLEAR_FLAGS, &notificationFlags, timeout)) \
       { \
         /* If no SPI interrupt occurs in time, transaction is aborted to prevent any longer delay */\
         HAL_SPI_Abort_IT(hspi); \

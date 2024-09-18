@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
+#include "spi.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -42,6 +44,9 @@
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
 
+osThreadId telemetryTaskHandle;
+uint32_t telemetryTaskBuffer[ 2048 ];
+osStaticThreadDef_t telemetryControlTaskBlock;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -50,12 +55,39 @@ SPI_HandleTypeDef hspi1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
+void startTelemetryTask(void const * argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/*!
+  @brief   Interrupt when SPI TX/RX finishes. Unblock task by releasing
+  	  	   semaphore
+  @param   SPI Handle
+*/
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+	if (hspi == &hspi1)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+{
+  if (hspi == &hspi1)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(telemetryTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+}
 
 /* USER CODE END 0 */
 
@@ -92,6 +124,36 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* definition and creation of telemetryTask */
+  osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 2048, telemetryTaskBuffer, &telemetryControlTaskBlock);
+  telemetryTaskHandle = osThreadCreate(osThread(telemetryTask), NULL);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -231,6 +293,24 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_startTelemetryTask */
+/**
+  * @brief  Function implementing the telemetryTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_startTelemetryTask */
+void startTelemetryTask(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.

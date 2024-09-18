@@ -2,6 +2,7 @@
 /* ============================= INCLUDES ============================= */
 /* ==================================================================== */
 #include "adbms.h"
+#include "spi.h"
 #include "main.h"
 
 
@@ -38,6 +39,8 @@
 /* ==================================================================== */
 /* ======================= EXTERNAL VARIABLES ========================= */
 /* ==================================================================== */
+
+extern SPI_HandleTypeDef hspi1;
 
 
 /* ==================================================================== */
@@ -105,6 +108,8 @@ uint16_t dataCrcTable[CRC_LUT_SIZE] =
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
+
+uint16_t localCommandCounter;
 
 
 /* ==================================================================== */
@@ -195,4 +200,168 @@ static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t com
     crc &= 0x03FF;
 
     return crc;
+}
+
+static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port)
+{
+    // Size in bytes: Command Word(2) + Command CRC(2)
+    uint32_t packetLength = COMMAND_PACKET_LENGTH;
+
+    // Create a transmit message buffer and a dummy rx buffer
+    uint8_t txBuffer[packetLength];
+    uint8_t rxBuffer[packetLength];
+
+    // Populate the tx buffer with the command word
+    txBuffer[0] = (uint8_t)(command >> BITS_IN_BYTE);
+    txBuffer[1] = (uint8_t)(command);
+
+    // Calculate the CRC on the command word and place the tx buffer
+    uint16_t commandCRC = calculateCommandCrc(txBuffer, COMMAND_SIZE_BYTES);
+    txBuffer[2] = (uint8_t)(commandCRC >> BITS_IN_BYTE);
+    txBuffer[3] = (uint8_t)(commandCRC);
+
+    // SPIify
+    openPort(port);
+    if(SPI_TRANSMIT(HAL_SPI_TransmitReceive_IT, &hspi1, SPI_TIMEOUT_MS, txBuffer, rxBuffer, packetLength) != SPI_SUCCESS)
+    {
+        closePort(port);
+        return TRANSACTION_SPI_ERROR;
+    }
+    closePort(port);
+
+    // TODO Temporary
+    // Increment command counter
+    localCommandCounter++;
+    if(localCommandCounter > 63)
+    {
+        localCommandCounter = 1;
+    }
+
+    return TRANSACTION_SUCCESS;
+}
+
+static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuff, PORT_E port)
+{
+    // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numBmbs
+    uint32_t packetLength = COMMAND_PACKET_LENGTH + (numBmbs * REGISTER_PACKET_LENGTH);
+
+    // Create a transmit message buffer and a dummy rx buffer
+    uint8_t txBuffer[packetLength];
+    uint8_t rxBuffer[packetLength];
+    
+    // Populate the tx buffer with the command word
+    txBuffer[0] = (uint8_t)(command >> BITS_IN_BYTE);
+    txBuffer[1] = (uint8_t)(command);
+
+    // Calculate the CRC on the command word and place the tx buffer
+    uint16_t commandCRC = calculateCommandCrc(txBuffer, COMMAND_SIZE_BYTES);
+    txBuffer[2] = (uint8_t)(commandCRC >> BITS_IN_BYTE);
+    txBuffer[3] = (uint8_t)(commandCRC);
+
+    // For each bmb, append a copy of the register data and corresponding CRC to the tx buffer  
+    for(int32_t i = 0; i < numBmbs; i++)
+    {
+        memcpy(txBuffer + COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH), txBuff + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
+
+        // Calculate the CRC on the register data packet (2 byte CRC on 6 byte packet)
+        uint16_t dataCRC = calculateDataCrc(txBuff + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES, 0);
+
+        txBuffer[COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES] = (uint8_t)(dataCRC >> BITS_IN_BYTE);;
+        txBuffer[COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1] = (uint8_t)(dataCRC);;
+    }
+
+    // SPIify
+    openPort(port);
+    if(SPI_TRANSMIT(HAL_SPI_TransmitReceive_IT, &hspi1, SPI_TIMEOUT_MS, txBuffer, rxBuffer, packetLength) != SPI_SUCCESS)
+    {
+        closePort(port);
+        return TRANSACTION_SPI_ERROR;
+    }
+    closePort(port);
+
+    // TODO Temporary
+    // Increment command counter
+    localCommandCounter++;
+    if(localCommandCounter > 63)
+    {
+        localCommandCounter = 1;
+    }
+    
+    return TRANSACTION_SUCCESS;
+}
+
+static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuff, PORT_E port)
+{
+    // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numBmbs
+    uint32_t packetLength = COMMAND_PACKET_LENGTH + (numBmbs * REGISTER_PACKET_LENGTH);
+
+    // Create transmit and recieve message buffers
+    uint8_t txBuffer[packetLength];
+    uint8_t rxBuffer[packetLength];
+
+    // Clear tx buffer array
+    memset(txBuffer, 0, packetLength);
+    
+    // Populate the tx buffer with the command word
+    txBuffer[0] = (uint8_t)(command >> BITS_IN_BYTE);
+    txBuffer[1] = (uint8_t)(command);
+
+    // Calculate the CRC on the command word and place the tx buffer
+    uint16_t commandCRC = calculateCommandCrc(txBuffer, COMMAND_SIZE_BYTES);
+    txBuffer[2] = (uint8_t)(commandCRC >> BITS_IN_BYTE);
+    txBuffer[3] = (uint8_t)(commandCRC);
+
+    for(int32_t i = 0; i < TRANSACTION_ATTEMPTS; i++)
+    {
+        // SPIify!
+        openPort(port);
+        if(SPI_TRANSMIT(HAL_SPI_TransmitReceive_IT, &hspi1, SPI_TIMEOUT_MS, txBuffer, rxBuffer, packetLength) != SPI_SUCCESS)
+        {
+            // On SPI failure, immediately return SPI error 
+            closePort(port);
+            return TRANSACTION_SPI_ERROR;
+        }
+        closePort(port);
+
+        for(int32_t j = 0; j < numBmbs; j++)
+        {
+            // Extract the register data for each bmb into a temporary array
+            uint8_t registerData[REGISTER_SIZE_BYTES];
+            memcpy(registerData, rxBuffer + (COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH)), REGISTER_SIZE_BYTES);
+
+            // Extract the CRC and Command Counter sent with the corresponding register data
+            uint16_t pec0 = rxBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES];
+            uint16_t pec1 = rxBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1];
+            uint16_t registerCRC = ((pec0 << BITS_IN_BYTE) | (pec1)) & 0x03FF;
+            uint8_t bmbCommandCounter = (uint8_t)pec0 >> (BITS_IN_BYTE - COMMAND_COUNTER_BITS);
+
+            // If the CRC is incorrect for the data sent, retry the spi transaction
+            if(calculateDataCrc(registerData, REGISTER_SIZE_BYTES, bmbCommandCounter) != registerCRC)
+            {
+                goto retry;
+            }
+
+            if(bmbCommandCounter != localCommandCounter)
+            {
+                if(bmbCommandCounter == 0)
+                {
+                    return TRANSACTION_POR_ERROR;
+                }
+                return TRANSACTION_COMMAND_COUNTER_ERROR;
+            }
+
+            // Populate rx buffer with local register data
+            if(port == PORTA)
+            {
+                memcpy(rxBuff + (j * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES); 
+            }
+            else
+            {
+                memcpy(rxBuff + ((numBmbs - j - 1) * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES); 
+            }
+        }
+        return TRANSACTION_SUCCESS;
+        retry:;
+    }
+    return TRANSACTION_CRC_ERROR;
 }
