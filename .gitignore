@@ -4,12 +4,12 @@
 .vscode/settings.json
 .vscode/tasks.json
 build/
-# cmake/
+cmake/
 CMakeFiles/
 
 build.ninja
 cmake_install.cmake
-CMakeLists.txt
+# CMakeLists.txt
 CMakeCache.txt
 CMakePresets.json
 compile_commands.json
