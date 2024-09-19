@@ -5,6 +5,7 @@
 #include "telemetryTask.h"
 #include "main.h"
 #include "cmsis_os.h"
+#include <string.h>
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -46,11 +47,28 @@ void initTelemetryTask()
 void runTelemetryTask()
 {
     // Create local data struct for bmb information
-    TelemetryTaskOutputData_S telemetryTaskOutputDataLocal;        
+    TelemetryTaskOutputData_S telemetryTaskOutputDataLocal;
 
-    telemetryTaskOutputDataLocal.bmb[0].testStatus = readRegister(0x0002, 1, telemetryTaskOutputDataLocal.bmb[0].testData, PORTA);
+    //// Test Transaction
+
+    // WAKE BMBs
+
+    uint8_t rxBuff[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(rxBuff, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+
+    telemetryTaskOutputDataLocal.bmb[0].testStatus = readRegister(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff, PORTA);
+
+    for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+    {
+        for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
+        {
+            telemetryTaskOutputDataLocal.bmb[i].testData[j] = rxBuff[j + (i * REGISTER_SIZE_BYTES)];
+        }
+    }
     //test status = to the error code we get back from the read register function 
 
+
+    //// End test transaction
 
     taskENTER_CRITICAL();
     telemetryTaskOutputData = telemetryTaskOutputDataLocal;

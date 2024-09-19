@@ -229,11 +229,12 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 12;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 8;
   RCC_OscInitStruct.PLL.PLLN = 160;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
@@ -384,15 +385,14 @@ void startTelemetryTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
   initTelemetryTask();
-  // TickType_t lastTelemetryTaskTick = HAL_GetTick();
-  // const TickType_t telemetryTaskPeriod = pdMS_TO_TICKS(TELEMETRY_TASK_PERIOD_MS);
+  TickType_t lastTelemetryTaskTick = HAL_GetTick();
+  const TickType_t telemetryTaskPeriod = pdMS_TO_TICKS(TELEMETRY_TASK_PERIOD_MS);
 
   /* Infinite loop */
   for(;;)
   {
-    // runTelemetryTask();
-    osDelay(TELEMETRY_TASK_PERIOD_MS);
-    // vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
+    runTelemetryTask();
+    vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
   }
   /* USER CODE END 5 */
 }
@@ -408,15 +408,15 @@ void startPrintTask(void const * argument)
 {
   /* USER CODE BEGIN startPrintTask */
   initPrintTask();
-  // TickType_t lastPrintTaskTick = HAL_GetTick();
-  // const TickType_t printTaskPeriod = pdMS_TO_TICKS(PRINT_TASK_PERIOD_MS);
+  TickType_t lastPrintTaskTick = HAL_GetTick();
+  const TickType_t printTaskPeriod = pdMS_TO_TICKS(PRINT_TASK_PERIOD_MS);
 
   /* Infinite loop */
   for(;;)
   {
     runPrintTask();
     osDelay(PRINT_TASK_PERIOD_MS);
-    // vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
+    vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
   }
   /* USER CODE END startPrintTask */
 }
