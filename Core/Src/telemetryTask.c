@@ -4,6 +4,7 @@
 
 #include "telemetryTask.h"
 #include "main.h"
+#include "cmsis_os.h"
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -45,9 +46,12 @@ void initTelemetryTask()
 void runTelemetryTask()
 {
     // Create local data struct for bmb information
-    TelemetryTaskOutputData_S telemetryTaskOutputDataLocal;
-    telemetryTaskOutputDataLocal.bmb[0].testStatus = 0;
-    
+    TelemetryTaskOutputData_S telemetryTaskOutputDataLocal;        
+
+    telemetryTaskOutputDataLocal.bmb[0].testStatus = readRegister(0x0002, 1, telemetryTaskOutputDataLocal.bmb[0].testData, PORTA);
+    //test status = to the error code we get back from the read register function 
+
+
     taskENTER_CRITICAL();
     telemetryTaskOutputData = telemetryTaskOutputDataLocal;
     taskEXIT_CRITICAL();

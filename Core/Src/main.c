@@ -45,6 +45,8 @@
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
 
+UART_HandleTypeDef huart2;
+
 osThreadId telemetryTaskHandle;
 uint32_t telemetryTaskBuffer[ 2048 ];
 osStaticThreadDef_t telemetryControlTaskBlock;
@@ -61,11 +63,38 @@ TelemetryTaskOutputData_S telemetryTaskOutputData;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_USART2_UART_Init(void);
 void startTelemetryTask(void const * argument);
 void startPrintTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
+#ifdef __GNUC__
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#define GETCHAR_PROTOTYPE int __io_getchar(void)
+#else
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#define GETCHAR_PROTOTYPE int fgetc(FILE *f)
+#endif
 
+PUTCHAR_PROTOTYPE
+{
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
+
+GETCHAR_PROTOTYPE
+{
+  uint8_t ch = 0;
+
+  /* Clear the Overrun flag just before receiving the first character */
+  __HAL_UART_CLEAR_OREFLAG(&huart2);
+
+  /* Wait for reception of a character on the USART RX line and echo this
+   * character on console */
+  HAL_UART_Receive(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -106,6 +135,11 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  // while (1){
+    
+  //   printf("hi");
+
+  // }
 
   /* USER CODE END 1 */
 
@@ -128,6 +162,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_SPI1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -262,6 +297,39 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -315,7 +383,7 @@ static void MX_GPIO_Init(void)
 void startTelemetryTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
-  // initTelemetryTask();
+  initTelemetryTask();
   // TickType_t lastTelemetryTaskTick = HAL_GetTick();
   // const TickType_t telemetryTaskPeriod = pdMS_TO_TICKS(TELEMETRY_TASK_PERIOD_MS);
 
@@ -323,6 +391,7 @@ void startTelemetryTask(void const * argument)
   for(;;)
   {
     // runTelemetryTask();
+    osDelay(TELEMETRY_TASK_PERIOD_MS);
     // vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
   }
   /* USER CODE END 5 */
@@ -345,7 +414,8 @@ void startPrintTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    // runPrintTask();
+    runPrintTask();
+    osDelay(PRINT_TASK_PERIOD_MS);
     // vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
   }
   /* USER CODE END startPrintTask */
