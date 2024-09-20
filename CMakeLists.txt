@@ -51,6 +51,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../../Core/Src/adbms.c
     ../../Core/Src/printTask.c
     ../../Core/Src/telemetryTask.c
+    ../../Core/Src/utils.c
 )
 
 # Add include paths

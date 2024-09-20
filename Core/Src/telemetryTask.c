@@ -5,6 +5,7 @@
 #include "telemetryTask.h"
 #include "main.h"
 #include "cmsis_os.h"
+#include "utils.h"
 #include <string.h>
 
 /* ==================================================================== */
@@ -53,6 +54,13 @@ void runTelemetryTask()
 
     // WAKE BMBs
 
+    // delayMicroseconds(5000);
+    // HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);
+    // delayMicroseconds(5000);
+    // HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET);
+
+    // Transaction
+
     uint8_t rxBuff[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
     memset(rxBuff, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
@@ -66,7 +74,6 @@ void runTelemetryTask()
         }
     }
     //test status = to the error code we get back from the read register function 
-
 
     //// End test transaction
 
