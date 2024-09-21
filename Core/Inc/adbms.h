@@ -46,6 +46,8 @@ typedef enum
 TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port);
 TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuffer, PORT_E port);
 TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuffer, PORT_E port);
+void wakeChain(uint32_t numBmbs, PORT_E port);
+void readyChain(uint32_t numBmbs, PORT_E port);
 
 
 #endif /* INC_ADBMS_H_ */

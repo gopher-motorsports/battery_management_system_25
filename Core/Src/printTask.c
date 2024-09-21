@@ -55,7 +55,7 @@ static void printTestData(Bmb_S* bmb)
 
 void initPrintTask()
 {
-
+    
 }
 
 void runPrintTask()

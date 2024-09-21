@@ -4,6 +4,7 @@
 #include "adbms.h"
 #include "spi.h"
 #include "main.h"
+#include "utils.h"
 
 #include <string.h>
 
@@ -358,4 +359,29 @@ TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *r
         retry:;
     }
     return TRANSACTION_CRC_ERROR;
+}
+
+void wakeChain(uint32_t numBmbs, PORT_E port)
+{
+    for (uint32_t i = 0; i < numBmbs; i++)
+    {
+        openPort(port);
+        closePort(port);
+        // delayMicroseconds(500);
+        vTaskDelay(1);
+
+    }
+}
+
+
+
+void readyChain(uint32_t numBmbs, PORT_E port)
+{
+    for (uint32_t i = 0; i < numBmbs; i++)
+    {
+        openPort(port);
+        closePort(port);
+        // delayMicroseconds(10);
+        vTaskDelay(1);
+    }
 }

@@ -42,7 +42,7 @@
 
 void initTelemetryTask()
 {
-
+    wakeChain(NUM_BMBS_IN_ACCUMULATOR, PORTB);
 }
 
 void runTelemetryTask()
@@ -64,7 +64,9 @@ void runTelemetryTask()
     uint8_t rxBuff[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
     memset(rxBuff, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
-    telemetryTaskOutputDataLocal.bmb[0].testStatus = readRegister(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff, PORTA);
+    readyChain(NUM_BMBS_IN_ACCUMULATOR, PORTB);
+
+    telemetryTaskOutputDataLocal.bmb[0].testStatus = readRegister(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff, PORTB);
 
     for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
