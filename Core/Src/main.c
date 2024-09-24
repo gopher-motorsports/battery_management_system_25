@@ -231,7 +231,7 @@ void SystemClock_Config(void)
   /** Configure the main internal regulator output voltage
   */
   __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -242,7 +242,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 8;
-  RCC_OscInitStruct.PLL.PLLN = 160;
+  RCC_OscInitStruct.PLL.PLLN = 128;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
@@ -260,7 +260,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
   {
     Error_Handler();
   }
@@ -286,10 +286,10 @@ static void MX_SPI1_Init(void)
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -322,7 +322,7 @@ static void MX_TIM7_Init(void)
 
   /* USER CODE END TIM7_Init 1 */
   htim7.Instance = TIM7;
-  htim7.Init.Prescaler = 80-1;
+  htim7.Init.Prescaler = 64-1;
   htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim7.Init.Period = 65535;
   htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -396,7 +396,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(MAS2_GPIO_Port, MAS2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, MAS1_Pin|PORTA_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PORTB_CS_Pin */
   GPIO_InitStruct.Pin = PORTB_CS_Pin;
@@ -405,12 +408,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(PORTB_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PORTA_CS_Pin */
-  GPIO_InitStruct.Pin = PORTA_CS_Pin;
+  /*Configure GPIO pin : MAS2_Pin */
+  GPIO_InitStruct.Pin = MAS2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(PORTA_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(MAS2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : MAS1_Pin PORTA_CS_Pin */
+  GPIO_InitStruct.Pin = MAS1_Pin|PORTA_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -431,13 +441,16 @@ void startTelemetryTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
   initTelemetryTask();
-  TickType_t lastTelemetryTaskTick = HAL_GetTick();
+  TickType_t lastTelemetryTaskTick;
   const TickType_t telemetryTaskPeriod = pdMS_TO_TICKS(TELEMETRY_TASK_PERIOD_MS);
 
   /* Infinite loop */
   for(;;)
   {
+    // uint32_t taskStart = HAL_GetTick();
     runTelemetryTask();
+    // printf("TelemetryTaskTime: %lu\n", (HAL_GetTick()-taskStart));
+    
     vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
   }
   /* USER CODE END 5 */
@@ -454,13 +467,16 @@ void startPrintTask(void const * argument)
 {
   /* USER CODE BEGIN startPrintTask */
   initPrintTask();
-  TickType_t lastPrintTaskTick = HAL_GetTick();
+  TickType_t lastPrintTaskTick;
   const TickType_t printTaskPeriod = pdMS_TO_TICKS(PRINT_TASK_PERIOD_MS);
 
   /* Infinite loop */
   for(;;)
   {
+    // uint32_t taskStart = HAL_GetTick();
     runPrintTask();
+    // printf("PrintTaskTime: %lu\n", (HAL_GetTick()-taskStart));
+
     vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
   }
   /* USER CODE END startPrintTask */

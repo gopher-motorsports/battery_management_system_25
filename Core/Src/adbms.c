@@ -368,7 +368,7 @@ void wakeChain(uint32_t numBmbs, PORT_E port)
         openPort(port);
         closePort(port);
         // delayMicroseconds(500);
-        vTaskDelay(1);
+        // vTaskDelay(1);
 
     }
 }
@@ -382,6 +382,6 @@ void readyChain(uint32_t numBmbs, PORT_E port)
         openPort(port);
         closePort(port);
         // delayMicroseconds(10);
-        vTaskDelay(1);
+        // vTaskDelay(1);
     }
 }

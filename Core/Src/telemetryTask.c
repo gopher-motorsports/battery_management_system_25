@@ -8,6 +8,8 @@
 #include "utils.h"
 #include <string.h>
 
+#define NUM_READS  100
+
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
@@ -42,6 +44,12 @@
 
 void initTelemetryTask()
 {
+    HAL_GPIO_WritePin(MAS1_GPIO_Port, MAS1_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(MAS2_GPIO_Port, MAS2_Pin, GPIO_PIN_SET);
+
+    HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_SET);
+
     wakeChain(NUM_BMBS_IN_ACCUMULATOR, PORTB);
 }
 
@@ -66,15 +74,20 @@ void runTelemetryTask()
 
     readyChain(NUM_BMBS_IN_ACCUMULATOR, PORTB);
 
-    telemetryTaskOutputDataLocal.bmb[0].testStatus = readRegister(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff, PORTB);
-
-    for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+    for(int32_t n = 0; n < NUM_READS; n++)
     {
-        for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
+        TRANSACTION_STATUS_E status = readRegister(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff, PORTB);
+
+        for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
         {
-            telemetryTaskOutputDataLocal.bmb[i].testData[j] = rxBuff[j + (i * REGISTER_SIZE_BYTES)];
+            telemetryTaskOutputDataLocal.bmb[i].testStatus = status;
+            for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
+            {
+                telemetryTaskOutputDataLocal.bmb[i].testData[j] = rxBuff[j + (i * REGISTER_SIZE_BYTES)];
+            }
         }
     }
+
     //test status = to the error code we get back from the read register function 
 
     //// End test transaction
