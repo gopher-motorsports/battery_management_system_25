@@ -50,7 +50,7 @@ void initTelemetryTask()
     HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_SET);
 
-    wakeChain(NUM_BMBS_IN_ACCUMULATOR, PORTB);
+    wakeChain(NUM_BMBS_IN_ACCUMULATOR);
 }
 
 void runTelemetryTask()
@@ -72,19 +72,33 @@ void runTelemetryTask()
     uint8_t rxBuff[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
     memset(rxBuff, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
-    readyChain(NUM_BMBS_IN_ACCUMULATOR, PORTB);
+    uint8_t txBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
-    for(int32_t n = 0; n < NUM_READS; n++)
+
+    for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
-        TRANSACTION_STATUS_E status = readRegister(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff, PORTB);
-
-        for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+        static uint8_t reg = 0;
+        txBuffer[(REGISTER_SIZE_BYTES * i) + 3] = reg;
+        reg++;
+        if(reg > 0x0F)
         {
-            telemetryTaskOutputDataLocal.bmb[i].testStatus = status;
-            for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
-            {
-                telemetryTaskOutputDataLocal.bmb[i].testData[j] = rxBuff[j + (i * REGISTER_SIZE_BYTES)];
-            }
+            reg = 0;
+        }
+    }
+
+    readyChain(NUM_BMBS_IN_ACCUMULATOR);
+
+    writeChain(0x0001, NUM_BMBS_IN_ACCUMULATOR, txBuffer);
+
+    TRANSACTION_STATUS_E status = readChain(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff);
+
+    for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+    {
+        telemetryTaskOutputDataLocal.bmb[i].testStatus = status;
+        for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
+        {
+            telemetryTaskOutputDataLocal.bmb[i].testData[j] = rxBuff[j + (i * REGISTER_SIZE_BYTES)];
         }
     }
 
