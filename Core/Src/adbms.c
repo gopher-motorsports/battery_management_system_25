@@ -78,7 +78,8 @@ typedef struct
     CHAIN_STATUS_E chainStatus;
     uint32_t availableDevices[NUM_PORTS];
     PORT_E originPort;
-    uint32_t numDualPortTransactions
+    uint32_t numDualPortTransactions;
+    uint32_t localCommandCounter;
 } CHAIN_INFO_S;
 
 
@@ -132,7 +133,6 @@ uint16_t dataCrcTable[CRC_LUT_SIZE] =
 /* ==================================================================== */
 
 static CHAIN_INFO_S chainInfo;
-static uint16_t localCommandCounter;
 
 
 /* ==================================================================== */
@@ -144,10 +144,11 @@ static void closePort(PORT_E port);
 static void activatePort(uint32_t numBmbs, PORT_E port, uint32_t usDelay);
 static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes);
 static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t commandCounter);
-static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port);
+static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port);
 static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, uint8_t *txBuffer, PORT_E port);
 static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uint8_t *rxBuffer, PORT_E port);
 static TRANSACTION_STATUS_E updateChainStatus(uint32_t numBmbs);
+static TRANSACTION_STATUS_E resetCommandCounter(uint32_t numBmbs);
 
 
 /* ==================================================================== */
@@ -251,7 +252,7 @@ static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t com
     return crc;
 }
 
-static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT_E port)
+static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port)
 {
     // Size in bytes: Command Word(2) + Command CRC(2)
     uint32_t packetLength = COMMAND_PACKET_LENGTH;
@@ -277,15 +278,6 @@ static TRANSACTION_STATUS_E sendCommand(uint16_t command, uint32_t numBmbs, PORT
         return TRANSACTION_SPI_ERROR;
     }
     closePort(port);
-
-    // TODO Temporary
-    // Increment command counter
-    localCommandCounter++;
-    if(localCommandCounter > 63)
-    {
-        localCommandCounter = 1;
-    }
-
     return TRANSACTION_SUCCESS;
 }
 
@@ -335,14 +327,6 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numBmbs, ui
         return TRANSACTION_SPI_ERROR;
     }
     closePort(port);
-
-    // TODO Temporary
-    // Increment command counter
-    // localCommandCounter++;
-    // if(localCommandCounter > 63)
-    // {
-    //     localCommandCounter = 1;
-    // }
     
     return TRANSACTION_SUCCESS;
 }
@@ -398,15 +382,15 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uin
                 goto retry;
             }
 
-            // if(bmbCommandCounter != localCommandCounter)
-            // {
-            //     // FIX CC here
-            //     if(bmbCommandCounter == 0)
-            //     {
-            //         return TRANSACTION_POR_ERROR;
-            //     }
-            //     return TRANSACTION_COMMAND_COUNTER_ERROR;
-            // }
+            if(bmbCommandCounter != chainInfo.localCommandCounter)
+            {
+                // FIX CC here
+                if(bmbCommandCounter == 0)
+                {
+                    return TRANSACTION_POR_ERROR;
+                }
+                return TRANSACTION_COMMAND_COUNTER_ERROR;
+            }
 
             // Populate rx buffer with local register data
             if(port == PORTA)
@@ -481,6 +465,31 @@ static TRANSACTION_STATUS_E updateChainStatus(uint32_t numBmbs)
     
 }
 
+static TRANSACTION_STATUS_E resetCommandCounter(uint32_t numBmbs)
+{
+    TRANSACTION_STATUS_E status = updateChainStatus(numBmbs);
+    if(status == TRANSACTION_SPI_ERROR)
+    {
+        return TRANSACTION_SPI_ERROR;
+    }
+
+    if(sendCommand(RESET_COMMAND_COUNTER_ADDRESS, PORTA) == TRANSACTION_SPI_ERROR)
+    {
+        return TRANSACTION_SPI_ERROR;
+    }
+
+    if(chainInfo.chainStatus != CHAIN_COMPLETE)
+    {
+        if(sendCommand(RESET_COMMAND_COUNTER_ADDRESS, PORTB) == TRANSACTION_SPI_ERROR)
+        {
+            return TRANSACTION_SPI_ERROR;
+        }
+    }
+    chainInfo.localCommandCounter = 0;
+
+    return status;
+}
+
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
@@ -519,13 +528,28 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numBmbs)
     {
         // When the chain is complete, send the command using the current origin port
         // sendCommand will return either success or a spi error
-        return sendCommand(command, numBmbs, chainInfo.originPort);
+        TRANSACTION_STATUS_E status = sendCommand(command, chainInfo.originPort);
+        
+        // Increment command counter
+        chainInfo.localCommandCounter++;
+        if(chainInfo.localCommandCounter > 63)
+        {
+            chainInfo.localCommandCounter = 1;
+        }
+        return status;
     }
     else
     {
         // If there are any chain breaks, use both ports to reach as many bmbs as possible
-        TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (sendCommand(command, chainInfo.availableDevices[PORTA], PORTA)) : (TRANSACTION_SUCCESS);
-        TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (sendCommand(command, chainInfo.availableDevices[PORTB], PORTB)) : (TRANSACTION_SUCCESS); 
+        TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (sendCommand(command, PORTA)) : (TRANSACTION_SUCCESS);
+        TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (sendCommand(command, PORTB)) : (TRANSACTION_SUCCESS); 
+        
+        // Increment command counter
+        chainInfo.localCommandCounter++;
+        if(chainInfo.localCommandCounter > 63)
+        {
+            chainInfo.localCommandCounter = 1;
+        }
 
         // The attempted transaction worked only if both ports return success
         if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
@@ -573,14 +597,32 @@ TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numBmbs, uint8_t *txD
     {
         // When the chain is complete, send the command using the current origin port
         // sendCommand will return either success or a spi error
+        TRANSACTION_STATUS_E status = writeRegister(command, numBmbs, txData, chainInfo.originPort);
+
+        // Flip origin port
         chainInfo.originPort = !chainInfo.originPort;
-        return writeRegister(command, numBmbs, txData, chainInfo.originPort);
+
+        // Increment command counter
+        chainInfo.localCommandCounter++;
+        if(chainInfo.localCommandCounter > 63)
+        {
+            chainInfo.localCommandCounter = 1;
+        }
+
+        return status;
     }
     else
     {
         // If there are any chain breaks, use both ports to reach as many bmbs as possible
         TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (writeRegister(command, chainInfo.availableDevices[PORTA], txData, PORTA)) : (TRANSACTION_SUCCESS);
         TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (writeRegister(command, chainInfo.availableDevices[PORTB], txData + REGISTER_SIZE_BYTES * (numBmbs - chainInfo.availableDevices[PORTB]), PORTB)) : (TRANSACTION_SUCCESS); 
+
+        // Increment command counter
+        chainInfo.localCommandCounter++;
+        if(chainInfo.localCommandCounter > 63)
+        {
+            chainInfo.localCommandCounter = 1;
+        }
 
         // The attempted transaction worked only if both ports return success
         if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
@@ -630,8 +672,10 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
         if(chainInfo.chainStatus == CHAIN_COMPLETE)
         {
             // When the chain is complete, send the command using the current origin port
-            chainInfo.originPort = !chainInfo.originPort;
             TRANSACTION_STATUS_E cmdStatus = readRegister(command, numBmbs, rxData, chainInfo.originPort);
+
+            // Flip origin port
+            chainInfo.originPort = !chainInfo.originPort;
 
             // On success, return success
             // On SPI error, power on reset error, or command counter error, return the error code
@@ -641,10 +685,21 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
                 // On a transaction success, end and return success
                 return TRANSACTION_SUCCESS;
             }
-            else if(cmdStatus != TRANSACTION_CHAIN_BREAK_ERROR)
+            else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR || cmdStatus == TRANSACTION_POR_ERROR)
             {
-                // On any error besides chain break error, return error value
-                return cmdStatus;
+                TRANSACTION_STATUS_E resetState = resetCommandCounter(numBmbs);
+                if(resetState == TRANSACTION_SUCCESS)
+                {
+                    return cmdStatus;
+                }
+                else
+                {
+                    return resetState;
+                }
+            }
+            else if(cmdStatus == TRANSACTION_SPI_ERROR)
+            {
+                return TRANSACTION_SPI_ERROR;
             }
         }
         else
@@ -682,6 +737,34 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
                         return countStatus;
                     }
                     return TRANSACTION_CHAIN_BREAK_ERROR;
+                }
+            }
+            else if((portAStatus == TRANSACTION_SPI_ERROR) || (portBStatus == TRANSACTION_SPI_ERROR))
+            {
+                return TRANSACTION_SPI_ERROR;
+            }
+            else if((portAStatus == TRANSACTION_POR_ERROR) || (portBStatus == TRANSACTION_POR_ERROR))
+            {
+                TRANSACTION_STATUS_E resetState = resetCommandCounter(numBmbs);
+                if(resetState == TRANSACTION_SUCCESS)
+                {
+                    return TRANSACTION_POR_ERROR;
+                }
+                else
+                {
+                    return resetState;
+                }
+            }
+            else if((portAStatus == TRANSACTION_COMMAND_COUNTER_ERROR) || (portBStatus == TRANSACTION_COMMAND_COUNTER_ERROR))
+            {
+                TRANSACTION_STATUS_E resetState = resetCommandCounter(numBmbs);
+                if(resetState == TRANSACTION_SUCCESS)
+                {
+                    return TRANSACTION_COMMAND_COUNTER_ERROR;
+                }
+                else
+                {
+                    return resetState;
                 }
             }
 
