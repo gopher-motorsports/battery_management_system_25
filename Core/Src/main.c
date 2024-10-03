@@ -428,6 +428,18 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+// RTOS STATS CODE
+void configureTimerForRunTimeStats(void)
+{
+    ulHighFrequencyTimerTicks = 0;
+    HAL_TIM_Base_Start_IT(&htim10);
+}
+
+unsigned long getRunTimeCounterValue(void)
+{
+	return ulHighFrequencyTimerTicks;
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_startTelemetryTask */
@@ -481,6 +493,60 @@ void startPrintTask(void const * argument)
   }
   /* USER CODE END startPrintTask */
 }
+
+/* USER CODE BEGIN Header_startStatusTask */
+/**
+ * @brief Function implementing the statusTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_startStatusTask */
+void startStatusTask(void *argument) {
+	/* USER CODE BEGIN startStatusTask */
+
+	TaskStatus_t *pxTaskStatusArray;
+	volatile UBaseType_t uxArraySize, x;
+	unsigned long ulTotalRunTime;
+	float runtime_percent;
+
+	/* Infinite loop */
+	for (;;) {
+		osDelay(10000);
+
+		uxArraySize = uxTaskGetNumberOfTasks();
+		pxTaskStatusArray = pvPortMalloc(uxArraySize * sizeof(TaskStatus_t)); // a little bit scary!
+
+		if (pxTaskStatusArray != NULL) {
+			uxArraySize = uxTaskGetSystemState(pxTaskStatusArray, uxArraySize,
+					&ulTotalRunTime);
+
+			DBG("Task count = %lu", uxArraySize);
+			DBG("No      Name          S Usage   HW");
+
+			for (x = 0; x < uxArraySize; x++) {
+
+				runtime_percent = (float) (100
+						* (float) pxTaskStatusArray[x].ulRunTimeCounter
+						/ (float) ulTotalRunTime);
+
+				DBG("Task %lu: %-12s %2d %7.4f %4i", x,
+						pxTaskStatusArray[x].pcTaskName,
+						pxTaskStatusArray[x].eCurrentState, runtime_percent,
+						pxTaskStatusArray[x].usStackHighWaterMark);
+
+			}
+
+			vPortFree(pxTaskStatusArray);
+
+		} else {
+			DBG("Unable to allocate stack space");
+		}
+
+	}
+
+	/* USER CODE END startStatusTask */
+}
+
 
 /**
   * @brief  Period elapsed callback in non blocking mode

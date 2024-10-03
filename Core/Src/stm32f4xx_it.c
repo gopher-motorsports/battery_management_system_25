@@ -42,6 +42,9 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
 
+//variable to count the high frequency timer ticks
+volatile unsigned long ulHighFrequencyTimerTicks;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -199,7 +202,10 @@ void TIM7_IRQHandler(void)
   /* USER CODE END TIM7_IRQn 0 */
   HAL_TIM_IRQHandler(&htim7);
   /* USER CODE BEGIN TIM7_IRQn 1 */
-
+  // Needed for freertos stats
+  ulHighFrequencyTimerTicks++;
+  /* USER CODE END TIM1_TRG_COM_TIM11_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim11);
   /* USER CODE END TIM7_IRQn 1 */
 }
 
