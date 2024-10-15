@@ -5,7 +5,7 @@
 #include "soc.h"
 #include "lookupTable.h"
 #include "math.h"
-
+#include "adbms.h"
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -13,7 +13,11 @@
 
 #define TABLE_LENGTH 101
 
-
+//cmd codes
+#define RDFLAG 0x480C
+#define RDIACC 0x4824
+#define UNSNAP 0x017F
+#define SNAP 0x016D
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
@@ -58,3 +62,31 @@ float stateOfEnergy[TABLE_LENGTH] =
     0.76f, 0.77f, 0.78f, 0.79f, 0.80f, 0.81f, 0.82f, 0.83f, 0.84f, 0.86f, 0.87f, 0.88f, 0.89f, 
     0.90f, 0.91f, 0.92f, 0.93f, 0.94f, 0.95f, 0.97f, 0.98f, 0.99f, 1.00
 };
+
+
+/* ==================================================================== */
+
+
+static void updateSOCandSOE(Soc_S* soc){
+    //draw from accumulation register (IxACC)
+    //if IxACC has been updated, add that number to command counter and update SOC and SOE   
+     //UNSAP (un freeze all registers)
+    //SNAP (freeze all registers)
+    //RDFLAG (get I1CNTPHA )
+    //RDIACC (get IxACC)
+
+
+    // Unfreeze all registers
+    sendCommand(UNSNAP, PORTA);
+
+    // Freeze all registers
+    sendCommand(SNAP, PORTA);
+
+    // Get I1CNTPHA flag
+    uint16_t conversion_counter = sendCommand(RDFLAG, PORTA);
+
+    // Get IxACC value
+    uint16_t accumulation_reg = sendCommand(RDIACC, PORTA);
+
+   
+}
