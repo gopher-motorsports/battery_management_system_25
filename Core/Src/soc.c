@@ -22,6 +22,7 @@
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
 
+
 // State of charge for VTC6 cells
 float stateOfCharge[TABLE_LENGTH] = 
 {
@@ -66,27 +67,59 @@ float stateOfEnergy[TABLE_LENGTH] =
 
 /* ==================================================================== */
 
+void updateSOCandSOE(Soc_S* soc, PORT_E port) {
+    static uint16_t N = 1;
+    static uint16_t I1CNT_OLD = 0;
 
-static void updateSOCandSOE(Soc_S* soc){
-    //draw from accumulation register (IxACC)
-    //if IxACC has been updated, add that number to command counter and update SOC and SOE   
-     //UNSAP (un freeze all registers)
-    //SNAP (freeze all registers)
-    //RDFLAG (get I1CNTPHA )
-    //RDIACC (get IxACC)
+    // Perform the read sequence
+    readSequence(port);
+
+    // Get I1CNT from I1CNTPHA (combined)
+    uint16_t I1CNTPHA = sendCommand(RDFLAG, port);
+    uint16_t I1CNT = I1CNTPHA >> 2;
+
+    // Check for rollover
+    if (I1CNT < I1CNT_OLD) {
+        N = 0;
+    }
+
+    // Check if new conversion is available
+    if (I1CNT >= N * 8) {
+        N++;
+        //update CC
+        updateCoulombCounter(soc->coulombCounter, port);
+
+        // Process new conversions read from CC
+        // Update SOC and SOE based on CC
+
+    }
+
+    // Update I1CNT_OLD
+    I1CNT_OLD = I1CNT;
+
+    // calculate  ADC conversion time calculation here
+}
 
 
+void readSequence(PORT_E port) {
     // Unfreeze all registers
-    sendCommand(UNSNAP, PORTA);
+    sendCommand(UNSNAP, port);
 
     // Freeze all registers
-    sendCommand(SNAP, PORTA);
+    sendCommand(SNAP, port);
 
     // Get I1CNTPHA flag
-    uint16_t conversion_counter = sendCommand(RDFLAG, PORTA);
+    sendCommand(RDFLAG, port);
 
     // Get IxACC value
-    uint16_t accumulation_reg = sendCommand(RDIACC, PORTA);
+    sendCommand(RDIACC, port);
+}
 
-   
+void updateCoulombCounter(CoulombCounter_S* counter, PORT_E port) {
+    // Read the accumulated conversion results from IxACC
+    uint16_t IxACC = sendCommand(RDIACC, port);
+
+    // Process new conversions read from IxACC
+    // Update the coulomb counter based on IxACC
+    counter->accumulatedMilliCoulombs += IxACC; // Accumulate the milliCoulombs
 }
