@@ -102,16 +102,16 @@ void updateSOCandSOE(Soc_S* soc, PORT_E port) {
 
 
 void readSequence(PORT_E port) {
-    // Unfreeze all registers
+    //unfreeze all registers
     sendCommand(UNSNAP, port);
 
-    // Freeze all registers
+    // freeze all registers
     sendCommand(SNAP, port);
 
-    // Get I1CNTPHA flag
+    // get I1CNTPHA flag (conversion counter)
     sendCommand(RDFLAG, port);
 
-    // Get IxACC value
+    // get IxACC value (accumulator reg)
     sendCommand(RDIACC, port);
 }
 
@@ -120,6 +120,6 @@ void updateCoulombCounter(CoulombCounter_S* counter, PORT_E port) {
     uint16_t IxACC = sendCommand(RDIACC, port);
 
     // Process new conversions read from IxACC
-    // Update the coulomb counter based on IxACC
-    counter->accumulatedMilliCoulombs += IxACC; // Accumulate the milliCoulombs
+    // Update the coulomb counter
+    counter->accumulatedMilliCoulombs += IxACC; 
 }
