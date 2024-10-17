@@ -6,6 +6,7 @@
 #include "lookupTable.h"
 #include "math.h"
 #include "adbms.h"
+#include "main.h"
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -20,11 +21,15 @@
 #define SNAP 0x016D
 
 
-void updateSOCandSOE(Soc_S* soc, PORT_E port);
-static void calculateSocAndSoeByCC(Soc_S* soc);
+#define CONVERSION_MULTI 36  //conversion time (need to change)
+#define IADC_LSB 1e-6
+
+void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port);
+static float getSocFromCellVoltage(float cellVoltage);
+static float getSoeFromSoc(float soc);
 void countCoulombs(Soc_S* soc, PORT_E port);
-
-
+void readSequence(PORT_E port);
+float calculateADCConversionTime(void);
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
@@ -71,21 +76,46 @@ float stateOfEnergy[TABLE_LENGTH] =
     0.90f, 0.91f, 0.92f, 0.93f, 0.94f, 0.95f, 0.97f, 0.98f, 0.99f, 1.00
 };
 
+LookupTable_S socByOcvTable = { .length = TABLE_LENGTH, .x = openCellVoltage, .y = stateOfCharge};
+
+LookupTable_S soeFromSocTable = { .length = TABLE_LENGTH, .x = stateOfCharge, .y = stateOfEnergy};
 
 /* ==================================================================== */
+/*!
+  @brief   Get the state of charge (SOC) based on the cell voltage.
+  @param   cellVoltage - The cell voltage to be used for the SOC lookup.
+  @return  The state of charge as a percentage
+*/
+static float getSocFromCellVoltage(float cellVoltage)
+{
+    return lookup(cellVoltage, &socByOcvTable);
+}
 
-void updateSOCandSOE(Soc_S* soc, PORT_E port) {
+/*!
+  @brief   Get the state of energy (SOE) based on the state of charge (SOC).
+  @param   soc - The state of charge to be used for the SOE lookup.
+  @return  The state of energy in percent
+*/
+static float getSoeFromSoc(float soc)
+{
+    return lookup(soc, &soeFromSocTable);
+}
+
+
+
+
+void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port) {
     static uint16_t N = 1;
     static uint16_t I1CNT_OLD = 0;
 
-    // Perform the read sequence
+    //perform the read sequence
     readSequence(port);
 
-    // Get I1CNT from I1CNTPHA (combined)
+    // get I1CNT from I1CNTPHA (combined)
     uint16_t I1CNTPHA = sendCommand(RDFLAG, port);
     uint16_t I1CNT = I1CNTPHA >> 2;
 
-    // Check for rollover
+    // Check rollover
     if (I1CNT < I1CNT_OLD) {
         N = 0;
     }
@@ -93,22 +123,11 @@ void updateSOCandSOE(Soc_S* soc, PORT_E port) {
     // Check if new conversion is available
     if (I1CNT >= N * 8) {
         N++;
-        //update CC
-        countCoulombs(soc, port);
-
-        // Process new conversions read from CC
-        // Update SOC and SOE based on CC
-
+        countCoulombs(soc, port);  // Count the new coulombs
+        calculateSocAndSoeByCC(soc); // Update SOC and SOE based on CC
     }
 
-    // Update I1CNT_OLD
-    I1CNT_OLD = I1CNT;
-
-    // calculate  ADC conversion time calculation here
-}
-
-static void calculateSocAndSoeByCC(Soc_S* soc){
-
+    I1CNT_OLD = I1CNT;  // Update I1CNT_OLD
 }
 
 
@@ -126,11 +145,21 @@ void readSequence(PORT_E port) {
     sendCommand(RDIACC, port);
 }
 
+
 void countCoulombs(Soc_S* soc, PORT_E port) {
     // Read the accumulated conversion results from IxACC
     uint16_t IxACC = sendCommand(RDIACC, port);
+    float t_conv = calculateADCConversionTime();
 
-    // Process new conversions read from IxACC
-    // Update the coulomb counter
-    soc->coulombCounter.accumulatedMilliCoulombs += IxACC; // Accumulate the milliCoulombs
+    // calculate charge using coulomb counting formula
+    float charge = t_conv * (IxACC * IADC_LSB);
+    
+    // update CC in mC
+    soc->coulombCounter.accumulatedMilliCoulombs += charge * 1000; 
+
+}
+
+float calculateADCConversionTime(void) {
+
+    return TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
 }
