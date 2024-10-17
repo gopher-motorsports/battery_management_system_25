@@ -18,6 +18,13 @@
 #define RDIACC 0x4824
 #define UNSNAP 0x017F
 #define SNAP 0x016D
+
+
+void updateSOCandSOE(Soc_S* soc, PORT_E port);
+static void calculateSocAndSoeByCC(Soc_S* soc);
+void countCoulombs(Soc_S* soc, PORT_E port);
+
+
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
@@ -87,7 +94,7 @@ void updateSOCandSOE(Soc_S* soc, PORT_E port) {
     if (I1CNT >= N * 8) {
         N++;
         //update CC
-        updateCoulombCounter(soc->coulombCounter, port);
+        countCoulombs(soc, port);
 
         // Process new conversions read from CC
         // Update SOC and SOE based on CC
@@ -98,6 +105,10 @@ void updateSOCandSOE(Soc_S* soc, PORT_E port) {
     I1CNT_OLD = I1CNT;
 
     // calculate  ADC conversion time calculation here
+}
+
+static void calculateSocAndSoeByCC(Soc_S* soc){
+
 }
 
 
@@ -115,11 +126,11 @@ void readSequence(PORT_E port) {
     sendCommand(RDIACC, port);
 }
 
-void updateCoulombCounter(CoulombCounter_S* counter, PORT_E port) {
+void countCoulombs(Soc_S* soc, PORT_E port) {
     // Read the accumulated conversion results from IxACC
     uint16_t IxACC = sendCommand(RDIACC, port);
 
     // Process new conversions read from IxACC
     // Update the coulomb counter
-    counter->accumulatedMilliCoulombs += IxACC; 
+    soc->coulombCounter.accumulatedMilliCoulombs += IxACC; // Accumulate the milliCoulombs
 }
