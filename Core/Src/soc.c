@@ -103,70 +103,90 @@ static float getSoeFromSoc(float soc)
 
 
 
-void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port) {
-    static uint16_t N = 1;
-    static uint16_t I1CNT_OLD = 0;
+// void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port) {
+//     static uint16_t N = 1;
+//     static uint16_t I1CNT_OLD = 0;
 
-    //perform the read sequence
-    readSequence(port);
+//     //perform the read sequence
+//     readSequence(port);
 
-    uint16_t I1CNT = calculateConvCounter();
+//     uint16_t I1CNT = calculateConvCounter();
 
-    // Check rollover
-    if (I1CNT < I1CNT_OLD) {
-        N = 0;
+//     // Check rollover
+//     if (I1CNT < I1CNT_OLD) {
+//         N = 0;
+//     }
+
+//     // Check if new conversion is available
+//     if (I1CNT >= N * 8) {
+//         N++;
+//         countCoulombs(soc, port);  // Count the new coulombs
+//         calculateSocAndSoeByCC(soc); // Update SOC and SOE based on CC
+//     }
+
+//     I1CNT_OLD = I1CNT;  // Update I1CNT_OLD
+// }
+
+static void updateSocSoe(Soc_S* soc, float minCellVoltage, float deltaMillicoulombs) {
+    soc->socByOcv = getSocFromCellVoltage(minCellVoltage);
+    soc->soeByOcv = getSoeFromSoc(soc->socByOcv);
+
+    if (deltaMillicoulombs == 0) {
+        updateTimer(&soc->socByOcvQualificationTimer);
+        if (isTimerSet(&soc->socByOcvQualificationTimer)) {
+            soc->socByCoulombCounting = soc->socByOcv;
+            soc->soeByCoulombCounting = soc->soeByOcv;
+            // Back-calculate milliCoulombs
+            soc->coulombCounter.accumulatedMilliCoulombs = soc->socByCoulombCounting * soc->coulombCounter.initialMilliCoulombCount;
+            return;
+        }
+    } else {
+        clearTimer(&soc->socByOcvQualificationTimer);
+        soc->milliCoulombCounter += deltaMillicoulombs;
+        soc->socByCoulombCounting = (float)soc->milliCoulombCounter / MAX_ACCUMULATOR_MILLICOULOMBS;
+        //calc soe by CC
     }
-
-    // Check if new conversion is available
-    if (I1CNT >= N * 8) {
-        N++;
-        countCoulombs(soc, port);  // Count the new coulombs
-        calculateSocAndSoeByCC(soc); // Update SOC and SOE based on CC
-    }
-
-    I1CNT_OLD = I1CNT;  // Update I1CNT_OLD
 }
 
+// void readSequence(PORT_E port) {
+//     //unfreeze all registers
+//     sendCommand(UNSNAP, port);
 
-void readSequence(PORT_E port) {
-    //unfreeze all registers
-    sendCommand(UNSNAP, port);
+//     // freeze all registers
+//     sendCommand(SNAP, port);
 
-    // freeze all registers
-    sendCommand(SNAP, port);
+//     // get I1CNTPHA flag (conversion counter)
+//     sendCommand(RDFLAG, port);
 
-    // get I1CNTPHA flag (conversion counter)
-    sendCommand(RDFLAG, port);
-
-    // get IxACC value (accumulator reg)
-    sendCommand(RDIACC, port);
-}
+//     // get IxACC value (accumulator reg)
+//     sendCommand(RDIACC, port);
+// }
 
 
-void countCoulombs(Soc_S* soc, PORT_E port) {
-    // Read the accumulated conversion results from IxACC
-    uint16_t IxACC = calculateAccReg();
-    float t_conv = calculateADCConversionTime();
+// void countCoulombs(Soc_S* soc, PORT_E port) {
+//     // Read the accumulated conversion results from IxACC
+//     uint16_t IxACC = calculateAccReg();
+//     float t_conv = calculateADCConversionTime();
 
-    // calculate charge using coulomb counting formula
-    float charge = t_conv * (IxACC * IADC_LSB);
+//     // calculate charge using coulomb counting formula
+//     float charge = t_conv * (IxACC * IADC_LSB);
     
-    // update CC in mC
-    soc->coulombCounter.accumulatedMilliCoulombs += charge * 1000; 
+//     // update CC in mC
+//     soc->coulombCounter.accumulatedMilliCoulombs += charge * 1000; 
 
-}
+// }
 
-float calculateADCConversionTime(void) {
+// float calculateADCConversionTime(void) {
 
-    return TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
-}
+//     return TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
+// }
 
 
-float calculateAccReg(){
-    return sendCommand(RDIACC, port);
-}
+// float calculateAccReg(){
+//     return sendCommand(RDIACC, port);
+// }
 
-float calculateConvCounter(){
-    uint16_t I1CNTPHA = sendCommand(RDFLAG, port);
-    return  I1CNTPHA >> 2; //get I1CNT by itself
-}
+// float calculateConvCounter(){
+//     uint16_t I1CNTPHA = sendCommand(RDFLAG, port);
+//     return  I1CNTPHA >> 2; //get I1CNT by itself
+// }
