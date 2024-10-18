@@ -103,7 +103,6 @@ static float getSoeFromSoc(float soc)
 
 
 
-
 void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port) {
     static uint16_t N = 1;
     static uint16_t I1CNT_OLD = 0;

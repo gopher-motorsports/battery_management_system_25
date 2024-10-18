@@ -26,25 +26,13 @@
 
 typedef struct
 {
-    uint32_t initialMilliCoulombCount;
-    int32_t accumulatedMilliCoulombs;
-} CoulombCounter_S;
+    int32_t milliCoulombCounter;         // The coulomb counter
+    Timer_S socByOcvQualificationTimer;  // The qualification timer to determine whether SOC by OCV can be used
 
-typedef struct
-{
-    // Inputs
-    float minBrickVoltage;              // The current min brick voltage of the pack
-    float curAccumulatorCurrent;        // The value of the current flowing into/out of the accumulator
-    uint32_t deltaTimeMs;               // The time since the last update
-
-    // Outputs
-    bool  socByOcvGood;                  // Whether or not we can rely on SOC by OCV
-    CoulombCounter_S coulombCounter;    // The coulomb counter
-    Timer_S socByOcvGoodTimer;          // The qualification timer to determine whether SOC by OCV can be used
-    float socByOcv;                     // The state of charge using open circuit voltage
-    float socByCoulombCounting;         // The state of charge using coulomb counting
-    float soeByOcv;                     // The state of energy using open circuit voltage
-    float soeByCoulombCounting;         // The state of energy using coulomb counting
+    float socByOcv;                      // The state of charge using open circuit voltage
+    float soeByOcv;                      // The state of energy using open circuit voltage
+    float socByCoulombCounting;          // The state of charge using coulomb counting
+    float soeByCoulombCounting;          // The state of energy using coulomb counting
 } Soc_S;
 
 
