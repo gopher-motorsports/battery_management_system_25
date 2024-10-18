@@ -6,7 +6,7 @@
 /* ==================================================================== */
 
 #include "adbms.h"
-
+#include "soc.h"
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
@@ -28,6 +28,7 @@ typedef struct
 typedef struct
 {
 	Bmb_S bmb[NUM_BMBS_IN_ACCUMULATOR];
+    Soc_S soc;
 		// Set by BMB based on ability to balance in hardware
 } TelemetryTaskOutputData_S;
 

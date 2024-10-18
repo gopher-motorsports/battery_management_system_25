@@ -24,12 +24,9 @@
 #define CONVERSION_MULTI 36  //conversion time (need to change)
 #define IADC_LSB 1e-6
 
-void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port);
 static float getSocFromCellVoltage(float cellVoltage);
 static float getSoeFromSoc(float soc);
-void countCoulombs(Soc_S* soc, PORT_E port);
-void readSequence(PORT_E port);
-float calculateADCConversionTime(void);
+static void updateSocSoe(Soc_S* soc, float minCellVoltage, float deltaMillicoulombs);
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
@@ -128,24 +125,39 @@ static float getSoeFromSoc(float soc)
 // }
 
 static void updateSocSoe(Soc_S* soc, float minCellVoltage, float deltaMillicoulombs) {
-    soc->socByOcv = getSocFromCellVoltage(minCellVoltage);
-    soc->soeByOcv = getSoeFromSoc(soc->socByOcv);
+   // get SOC and SOE by OCV
+    soc->socByOcv = calculateSocByOcv(minCellVoltage);
+    soc->soeByOcv = calculateSoeByOcv(soc->socByOcv);
 
+    //if at 0A then use OCV 
     if (deltaMillicoulombs == 0) {
+        // update the qualification timer
         updateTimer(&soc->socByOcvQualificationTimer);
-        if (isTimerSet(&soc->socByOcvQualificationTimer)) {
+        // if timer has expired, calculate SOC and SOE by OCV
+        if (checkTimerExpired(&soc->socByOcvQualificationTimer)) {
             soc->socByCoulombCounting = soc->socByOcv;
-            soc->soeByCoulombCounting = soc->soeByOcv;
-            // Back-calculate milliCoulombs
-            soc->coulombCounter.accumulatedMilliCoulombs = soc->socByCoulombCounting * soc->coulombCounter.initialMilliCoulombCount;
+            soc->soeByCoulombCounting = soc->socByCoulombCounting;
+            //back calculate milliCoulombCounter
+            soc->milliCoulombCounter = soc->socByCoulombCounting * MAX_ACCUMULATOR_MILLICOULOMBS;
             return;
         }
-    } else {
-        clearTimer(&soc->socByOcvQualificationTimer);
-        soc->milliCoulombCounter += deltaMillicoulombs;
-        soc->socByCoulombCounting = (float)soc->milliCoulombCounter / MAX_ACCUMULATOR_MILLICOULOMBS;
-        //calc soe by CC
     }
+        // Reset the timer if current is flowing (i.e., deltaMilliCoulombs > 0)
+        clearTimer(&soc->socByOcvQualificationTimer);
+        // Update the milliCoulomb counter with the new charge
+        soc->milliCoulombCounter += deltaMillicoulombs;
+        // Calculate SOC and SOE using Coulomb Counting
+        soc->socByCoulombCounting = calculateSocByCoulombCounting(soc->milliCoulombCounter);
+        soc->soeByCoulombCounting = getSoeFromSoc(soc->socByCoulombCounting);
+
+}
+
+static float calculateSocByCoulombCounting(int32_t milliCoulombCounter){
+    if (milliCoulombCounter > MAX_ACCUMULATOR_MILLICOULOMBS)
+    {
+        milliCoulombCounter = MAX_ACCUMULATOR_MILLICOULOMBS;
+    }
+    return ((float)milliCoulombCounter)/((float)MAX_ACCUMULATOR_MILLICOULOMBS);
 }
 
 // void readSequence(PORT_E port) {
