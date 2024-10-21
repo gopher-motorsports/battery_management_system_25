@@ -139,8 +139,8 @@ static void updateSocSoe(Soc_S* soc, float minCellVoltage, float deltaMillicoulo
             soc->soeByCoulombCounting = soc->socByCoulombCounting;
             //back calculate milliCoulombCounter
             soc->milliCoulombCounter = soc->socByCoulombCounting * MAX_ACCUMULATOR_MILLICOULOMBS;
-            return;
         }
+        return;
     }
         // Reset the timer if current is flowing (i.e., deltaMilliCoulombs > 0)
         clearTimer(&soc->socByOcvQualificationTimer);
