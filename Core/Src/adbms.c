@@ -379,12 +379,19 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uin
             // If the CRC is incorrect for the data sent, retry the spi transaction
             if(calculateDataCrc(registerData, REGISTER_SIZE_BYTES, bmbCommandCounter) != registerCRC)
             {
+                // Check if the data and crc is all zeros, if so, return chain break error
+                uint8_t zero = 0;
+                if(memcmp(rxBuffer + (COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH)), &zero, REGISTER_PACKET_LENGTH) == 0)
+                {
+                    return TRANSACTION_CHAIN_BREAK_ERROR;
+                }
+
+                // If data and crc is not all zeros, try again to resolve crc error
                 goto retry;
             }
 
             if(bmbCommandCounter != chainInfo.localCommandCounter)
             {
-                // FIX CC here
                 if(bmbCommandCounter == 0)
                 {
                     return TRANSACTION_POR_ERROR;
