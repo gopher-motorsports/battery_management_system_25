@@ -56,7 +56,12 @@ typedef struct
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
-Soc_S soc = {.milliCoulombCounter = 0, .socByOcvQualificationTimer = (Timer_S){.timCount = SOC_BY_OCV_QUALIFICATION_TIME, .lastUpdate = 0, .timThreshold = SOC_BY_OCV_QUALIFICATION_TIME}, .socByOcv = 0, .soeByOcv = 0,.socByCoulombCounting = 0, .socByCoulombCounting = 0};
+Soc_S soc = {.milliCoulombCounter = 0, 
+            .socByOcvQualificationTimer = (Timer_S){.timCount = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS, .lastUpdate = 0, .timThreshold = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS}, 
+            .socByOcv = 0, 
+            .soeByOcv = 0,
+            .socByCoulombCounting = 0, 
+            .socByCoulombCounting = 0};
 
 
 
