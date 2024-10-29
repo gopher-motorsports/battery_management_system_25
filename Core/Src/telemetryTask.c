@@ -48,6 +48,7 @@ static TRANSACTION_STATUS_E updateTestData(TelemetryTaskOutputData_S *taskData);
     if(error != TRANSACTION_SUCCESS) { \
         if(error == TRANSACTION_CHAIN_BREAK_ERROR) \
         { \
+            Debug("Chain break!\n"); \
             chainBreak = true; \
         } \
         else if(error == TRANSACTION_SPI_ERROR) \
@@ -115,11 +116,16 @@ static TRANSACTION_STATUS_E updateTestData(TelemetryTaskOutputData_S *taskData)
 
     for(int32_t attempt = 0; attempt < NUM_COMMAND_BLOCK_RETRYS; attempt++)
     {
-        HANDLE_ISOSPI_ERROR(writeChain(WR_CFG_REG_A, NUM_BMBS_IN_ACCUMULATOR, txBuffer));
-        HANDLE_ISOSPI_ERROR(readChain(RD_CFG_REG_A, NUM_BMBS_IN_ACCUMULATOR, rxBuffer));
+        TRANSACTION_STATUS_E status = writeChain(WR_CFG_REG_A, NUM_BMBS_IN_ACCUMULATOR, txBuffer);
+        HANDLE_ISOSPI_ERROR(status);
+
+        status = readChain(RD_CFG_REG_A, NUM_BMBS_IN_ACCUMULATOR, rxBuffer);
+        HANDLE_ISOSPI_ERROR(status);
+
 
         for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
         {
+            taskData->bmb[i].testStatus = status;
             for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
             {
                 taskData->bmb[i].testData[j] = rxBuffer[j + (i * REGISTER_SIZE_BYTES)];

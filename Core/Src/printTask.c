@@ -66,8 +66,8 @@ void runPrintTask()
     taskEXIT_CRITICAL();
 
     // Clear terminal output
-    printf("\e[1;1H\e[2J");
+    // printf("\e[1;1H\e[2J");
 
-    printTestData(printTaskInputData.telemetryTaskData.bmb);
+    // printTestData(printTaskInputData.telemetryTaskData.bmb);
 
 }
