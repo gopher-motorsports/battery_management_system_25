@@ -15,10 +15,12 @@
 #define TABLE_LENGTH 101
 
 //cmd codes
-#define RDFLAG 0x480C
-#define RDIACC 0x4824
-#define UNSNAP 0x017F
-#define SNAP 0x016D
+#define RDFLAG  //idk what the command code is yet
+#define RDIACC  0x44
+#define UNSNAP  0x2F
+#define SNAP    0x2D
+
+
 
 
 #define CONVERSION_MULTI 36  //conversion time (need to change)
@@ -99,31 +101,12 @@ static float getSoeFromSoc(float soc)
 }
 
 
-
-// void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port) {
-//     static uint16_t N = 1;
-//     static uint16_t I1CNT_OLD = 0;
-
-//     //perform the read sequence
-//     readSequence(port);
-
-//     uint16_t I1CNT = calculateConvCounter();
-
-//     // Check rollover
-//     if (I1CNT < I1CNT_OLD) {
-//         N = 0;
-//     }
-
-//     // Check if new conversion is available
-//     if (I1CNT >= N * 8) {
-//         N++;
-//         countCoulombs(soc, port);  // Count the new coulombs
-//         calculateSocAndSoeByCC(soc); // Update SOC and SOE based on CC
-//     }
-
-//     I1CNT_OLD = I1CNT;  // Update I1CNT_OLD
-// }
-
+/*!
+  @brief   Update the state of charge (SOC) and state of energy (SOE) using the appropriate method.
+  @param   soc - Pointer to the Soc_S struct containing the necessary information for SOC and SOE calculation.
+  @param   minCellVoltage - The minimum cell voltage in the pack.
+  @param   deltaMillicoulombs - The change in milliCoulombs since the last update.
+*/
 static void updateSocSoe(Soc_S* soc, float minCellVoltage, float deltaMillicoulombs) {
    // get SOC and SOE by OCV
     soc->socByOcv = calculateSocByOcv(minCellVoltage);
@@ -152,6 +135,7 @@ static void updateSocSoe(Soc_S* soc, float minCellVoltage, float deltaMillicoulo
 
 }
 
+
 static float calculateSocByCoulombCounting(int32_t milliCoulombCounter){
     if (milliCoulombCounter > MAX_ACCUMULATOR_MILLICOULOMBS)
     {
@@ -159,46 +143,3 @@ static float calculateSocByCoulombCounting(int32_t milliCoulombCounter){
     }
     return ((float)milliCoulombCounter)/((float)MAX_ACCUMULATOR_MILLICOULOMBS);
 }
-
-// void readSequence(PORT_E port) {
-//     //unfreeze all registers
-//     sendCommand(UNSNAP, port);
-
-//     // freeze all registers
-//     sendCommand(SNAP, port);
-
-//     // get I1CNTPHA flag (conversion counter)
-//     sendCommand(RDFLAG, port);
-
-//     // get IxACC value (accumulator reg)
-//     sendCommand(RDIACC, port);
-// }
-
-
-// void countCoulombs(Soc_S* soc, PORT_E port) {
-//     // Read the accumulated conversion results from IxACC
-//     uint16_t IxACC = calculateAccReg();
-//     float t_conv = calculateADCConversionTime();
-
-//     // calculate charge using coulomb counting formula
-//     float charge = t_conv * (IxACC * IADC_LSB);
-    
-//     // update CC in mC
-//     soc->coulombCounter.accumulatedMilliCoulombs += charge * 1000; 
-
-// }
-
-// float calculateADCConversionTime(void) {
-
-//     return TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
-// }
-
-
-// float calculateAccReg(){
-//     return sendCommand(RDIACC, port);
-// }
-
-// float calculateConvCounter(){
-//     uint16_t I1CNTPHA = sendCommand(RDFLAG, port);
-//     return  I1CNTPHA >> 2; //get I1CNT by itself
-// }
