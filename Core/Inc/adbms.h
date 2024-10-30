@@ -40,7 +40,8 @@ void readyChain(uint32_t numBmbs);
 TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numBmbs);
 TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numBmbs, uint8_t *txData);
 TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxData);
-
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *rxData);
+TRANSACTION_STATUS_E writePackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *txData);
 
 #endif /* INC_ADBMS_H_ */
 
