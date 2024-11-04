@@ -289,7 +289,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
   hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_128;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -447,9 +447,9 @@ void startTelemetryTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    // uint32_t taskStart = HAL_GetTick();
+    uint32_t taskStart = HAL_GetTick();
     runTelemetryTask();
-    // printf("TelemetryTaskTime: %lu\n", (HAL_GetTick()-taskStart));
+    printf("%lu\n", (HAL_GetTick()-taskStart));
     
     vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
   }

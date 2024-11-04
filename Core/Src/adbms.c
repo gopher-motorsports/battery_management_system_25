@@ -38,7 +38,7 @@
 #define RESET_COMMAND_COUNTER_ADDRESS   0x002E
 #define READ_SERIAL_ID_COMMAND          0x002C
 
-#define DUAL_PORT_TRANSACTIONS_BEFORE_RETRY 1000
+#define DUAL_PORT_TRANSACTIONS_BEFORE_RETRY 100
 
 #define TIME_WAKE_US            500
 #define TIME_READY_US           10
@@ -382,6 +382,13 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uin
             // If the CRC is incorrect for the data sent, retry the spi transaction
             if(calculateDataCrc(registerData, REGISTER_SIZE_BYTES, bmbCommandCounter) != registerCRC)
             {
+                // Check if the data and crc is all zeros, if so, return chain break error
+                // uint8_t zero = 0;
+                // if(memcmp(rxBuffer + (COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH)), &zero, REGISTER_PACKET_LENGTH) == 0)
+                // {
+                //     return TRANSACTION_CHAIN_BREAK_ERROR;
+                // }
+
                 returnStatus = TRANSACTION_CHAIN_BREAK_ERROR;
                 break;
             }
@@ -390,12 +397,14 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numBmbs, uin
             // This allows us to finish checking if there is a chain break or crc error before returning
             if(bmbCommandCounter != chainInfo.localCommandCounter)
             {
-                returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
-                // if((bmbCommandCounter != 0) && (returnStatus != TRANSACTION_POR_ERROR))
-                // {
-                //     returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
-                // }
-                // returnStatus = TRANSACTION_POR_ERROR;
+                if((bmbCommandCounter != 0) && (returnStatus != TRANSACTION_POR_ERROR))
+                {
+                    returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
+                }
+                else
+                {
+                    returnStatus = TRANSACTION_POR_ERROR;
+                }      
             }
 
             // Populate rx buffer with local register data
@@ -431,6 +440,8 @@ static TRANSACTION_STATUS_E updateChainStatus(uint32_t numBmbs)
     // Create dummy buffer for read command  
     uint8_t rxBuff[numBmbs * REGISTER_SIZE_BYTES];
 
+    TRANSACTION_STATUS_E returnStatus = TRANSACTION_SUCCESS;
+
     // Attempt to read from an increasing number of bmbs from each port
     // Set availableBmbs to the number of bmbs reachable 
     for(int32_t port = 0; port < NUM_PORTS; port++)
@@ -448,6 +459,14 @@ static TRANSACTION_STATUS_E updateChainStatus(uint32_t numBmbs)
             {
                 // On a SPI error, end function and return SPI error
                 return TRANSACTION_SPI_ERROR;
+            }
+            else if(readStatus == TRANSACTION_POR_ERROR)
+            {
+                returnStatus = TRANSACTION_POR_ERROR;
+            }
+            else if((readStatus == TRANSACTION_COMMAND_COUNTER_ERROR) && (returnStatus != TRANSACTION_POR_ERROR))
+            {
+                returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
             }
         }
     }
@@ -470,7 +489,7 @@ static TRANSACTION_STATUS_E updateChainStatus(uint32_t numBmbs)
         chainInfo.chainStatus = MULTIPLE_CHAIN_BREAK;
     }
 
-    return TRANSACTION_SUCCESS;
+    return returnStatus;
     
 }
 
@@ -556,8 +575,13 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numBmbs)
                     {
                         chainInfo.numDualPortTransactions = 0;
                         TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numBmbs);
-                        if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                        if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
                         {
+                            return TRANSACTION_SPI_ERROR;
+                        }
+                        else if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                        {
+                            resetCommandCounter(numBmbs);
                             return chainUpdateStatus;
                         }
                     }
@@ -569,10 +593,16 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numBmbs)
                 {
                     // If there is a multi-chain break, not every bmb is successfully reached, so attempt to update the chain status once and return error
                     TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numBmbs);
-                    if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                    if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
                     {
+                        return TRANSACTION_SPI_ERROR;
+                    }
+                    else if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                    {
+                        resetCommandCounter(numBmbs);
                         return chainUpdateStatus;
                     }
+
                     if(chainInfo.chainStatus != MULTIPLE_CHAIN_BREAK)
                     {
                         continue;
@@ -639,8 +669,13 @@ TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numBmbs, uint8_t *txD
                     {
                         chainInfo.numDualPortTransactions = 0;
                         TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numBmbs);
-                        if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                        if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
                         {
+                            return TRANSACTION_SPI_ERROR;
+                        }
+                        else if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                        {
+                            resetCommandCounter(numBmbs);
                             return chainUpdateStatus;
                         }
                     }
@@ -652,10 +687,16 @@ TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numBmbs, uint8_t *txD
                 {
                     // If there is a multi-chain break, not every bmb is successfully reached, so attempt to update the chain status once and return error
                     TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numBmbs);
-                    if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                    if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
                     {
+                        return TRANSACTION_SPI_ERROR;
+                    }
+                    else if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                    {
+                        resetCommandCounter(numBmbs);
                         return chainUpdateStatus;
                     }
+
                     if(chainInfo.chainStatus != MULTIPLE_CHAIN_BREAK)
                     {
                         continue;
@@ -685,21 +726,21 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
             // When the chain is complete, send the command using the current origin port
             TRANSACTION_STATUS_E cmdStatus = readRegister(command, numBmbs, rxData, chainInfo.originPort);
 
-            // Flip origin port
-            chainInfo.originPort = !chainInfo.originPort;
-
             // On success, return success
             // On SPI error, power on reset error, or command counter error, return the error code
             // On a crc error, drop to bottom of the for loop and try to update the chain status
             if(cmdStatus == TRANSACTION_SUCCESS)
             {
+                // Flip origin port
+                chainInfo.originPort = !chainInfo.originPort;
+
                 // On a transaction success, end and return success
                 return TRANSACTION_SUCCESS;
             }
-            else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR)
+            else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR || cmdStatus == TRANSACTION_POR_ERROR)
             {
                 resetCommandCounter(numBmbs);
-                return TRANSACTION_COMMAND_COUNTER_ERROR;
+                return cmdStatus;
             }
             else if(cmdStatus == TRANSACTION_SPI_ERROR)
             {
@@ -723,8 +764,13 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
                     {
                         chainInfo.numDualPortTransactions = 0;
                         TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numBmbs);
-                        if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                        if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
                         {
+                            return TRANSACTION_SPI_ERROR;
+                        }
+                        else if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                        {
+                            resetCommandCounter(numBmbs);
                             return chainUpdateStatus;
                         }
                     }
@@ -736,8 +782,13 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
                 {
                     // If there is a multi-chain break, not every bmb is successfully reached, so attempt to update the chain status once and return error
                     TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numBmbs);
-                    if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                    if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
                     {
+                        return TRANSACTION_SPI_ERROR;
+                    }
+                    else if(chainUpdateStatus != TRANSACTION_SUCCESS)
+                    {
+                        resetCommandCounter(numBmbs);
                         return chainUpdateStatus;
                     }
 
@@ -752,27 +803,27 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
             {
                 return TRANSACTION_SPI_ERROR;
             }
+            else if((portAStatus == TRANSACTION_POR_ERROR) || (portBStatus == TRANSACTION_POR_ERROR))
+            {
+                resetCommandCounter(numBmbs);
+                return TRANSACTION_COMMAND_COUNTER_ERROR;
+            }
             else if((portAStatus == TRANSACTION_COMMAND_COUNTER_ERROR) || (portBStatus == TRANSACTION_COMMAND_COUNTER_ERROR))
             {
                 resetCommandCounter(numBmbs);
                 return TRANSACTION_COMMAND_COUNTER_ERROR;
             }
-
-            // On SPI error, power on reset error, or command counter error, return the highest priority error code found from either port
-            // On a crc error, drop to bottom of the for loop and try to update the chain status
-            for(TRANSACTION_STATUS_E errorStatus = TRANSACTION_SPI_ERROR; errorStatus < TRANSACTION_SUCCESS; errorStatus++)
-            {
-                if((portAStatus == errorStatus) || (portBStatus == errorStatus))
-                {
-                    return errorStatus;
-                }
-            }
         }
 
         // On a chain break error, attempt to update the chain status
         TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numBmbs);
-        if(chainUpdateStatus != TRANSACTION_SUCCESS)
+        if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
         {
+            return TRANSACTION_SPI_ERROR;
+        }
+        else if(chainUpdateStatus != TRANSACTION_SUCCESS)
+        {
+            resetCommandCounter(numBmbs);
             return chainUpdateStatus;
         }
 
