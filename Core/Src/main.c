@@ -447,9 +447,9 @@ void startTelemetryTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    // uint32_t taskStart = HAL_GetTick();
+    uint32_t taskStart = HAL_GetTick();
     runTelemetryTask();
-    // printf("TelemetryTaskTime: %lu\n", (HAL_GetTick()-taskStart));
+    printf("%lu\n", (HAL_GetTick()-taskStart));
     
     vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
   }

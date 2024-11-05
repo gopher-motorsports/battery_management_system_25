@@ -1,5 +1,5 @@
-#ifndef INC_SPI_H_
-#define INC_SPI_H_
+#ifndef SPI_H_
+#define SPI_H_
 
 /* ==================================================================== */
 /* ============================= INCLUDES ============================= */
@@ -74,4 +74,4 @@ typedef enum
     (SPI_STATUS_E) notificationFlags; \
   })
 
-#endif /* INC_SPI_H_ */
+#endif /* SPI_H_ */
