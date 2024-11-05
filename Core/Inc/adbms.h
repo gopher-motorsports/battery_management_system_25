@@ -17,6 +17,10 @@
 #define COMMAND_SIZE_BYTES       2
 #define REGISTER_SIZE_BYTES      6
 
+// ADBMS Register addresses
+#define WR_CFG_REG_A            0x0001
+#define RD_CFG_REG_A            0x0002
+
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
 /* ==================================================================== */

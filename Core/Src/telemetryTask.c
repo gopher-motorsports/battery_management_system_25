@@ -6,13 +6,17 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "utils.h"
+#include "debug.h"
 #include <string.h>
+#include <stdbool.h>
 
 
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
+
+#define NUM_COMMAND_BLOCK_RETRYS            3
 #define NUM_READS  100
 
 #define SNAP_COMMAND 0x2D
@@ -45,18 +49,112 @@ typedef struct
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
 
+bool chainInitialized;
+bool chainBreak;
+
 PORT_E port = PORTA;
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
+static bool initChain();
+static TRANSACTION_STATUS_E updateTestData(TelemetryTaskOutputData_S *taskData);
+
 /* ==================================================================== */
 /* ============================== MACROS ============================== */
 /* ==================================================================== */
 
+#define HANDLE_ISOSPI_ERROR(error) \
+    if(error != TRANSACTION_SUCCESS) { \
+        if(error == TRANSACTION_CHAIN_BREAK_ERROR) \
+        { \
+            Debug("Chain break!\n"); \
+            chainBreak = true; \
+        } \
+        else if(error == TRANSACTION_SPI_ERROR) \
+        { \
+            Debug("SPI Failure, reseting STM32...\n"); \
+            HAL_NVIC_SystemReset(); \
+        } \
+        else if(error == TRANSACTION_POR_ERROR) \
+        { \
+            Debug("Power reset detected, reinitializing...\n"); \
+            chainInitialized = initChain(); \
+            return TRANSACTION_POR_ERROR; \
+        } \
+        else if(error == TRANSACTION_COMMAND_COUNTER_ERROR) \
+        { \
+            Debug("Command counter mismatch! Retrying command block!\n"); \
+            continue; \
+        } \
+        else \
+        { \
+            Debug("Unknown transaction error\n"); \
+            return; \
+        } \
+    }
+
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
+
+static bool initChain()
+{
+    bool initSuccess = true;
+
+    wakeChain(NUM_BMBS_IN_ACCUMULATOR);
+
+    if(!initSuccess)
+    {
+        Debug("BMBs failed to initialize!\n");
+        return false;
+    }
+    Debug("BMB initialization successful!\n");
+    return true;
+}
+
+static TRANSACTION_STATUS_E updateTestData(TelemetryTaskOutputData_S *taskData)
+{
+    // Create and clear rx and tx buffers
+    uint8_t rxBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(rxBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+
+    uint8_t txBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+
+    // Calculate new data to seed in GPIO registers
+    for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+    {
+        static uint8_t reg = 0;
+        txBuffer[(REGISTER_SIZE_BYTES * i) + 3] = reg;
+        reg++;
+        if(reg > 0x0F)
+        {
+            reg = 0;
+        }
+    }
+
+    for(int32_t attempt = 0; attempt < NUM_COMMAND_BLOCK_RETRYS; attempt++)
+    {
+        TRANSACTION_STATUS_E status = writeChain(WR_CFG_REG_A, NUM_BMBS_IN_ACCUMULATOR, txBuffer);
+        HANDLE_ISOSPI_ERROR(status);
+
+        status = readChain(RD_CFG_REG_A, NUM_BMBS_IN_ACCUMULATOR, rxBuffer);
+        HANDLE_ISOSPI_ERROR(status);
+
+
+        for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+        {
+            taskData->bmb[i].testStatus = status;
+            for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
+            {
+                taskData->bmb[i].testData[j] = rxBuffer[j + (i * REGISTER_SIZE_BYTES)];
+            }
+        }
+        return TRANSACTION_SUCCESS;
+    }
+    return TRANSACTION_COMMAND_COUNTER_ERROR;
+}
 Soc_S soc = {.milliCoulombCounter = 0, 
             .socByOcvQualificationTimer = (Timer_S){.timCount = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS, .lastUpdate = 0, .timThreshold = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS}, 
             .socByOcv = 0, 
@@ -77,8 +175,6 @@ void initTelemetryTask()
 
     HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_SET);
-
-    wakeChain(NUM_BMBS_IN_ACCUMULATOR);
 }
 
 void runTelemetryTask()
@@ -86,57 +182,42 @@ void runTelemetryTask()
     // Create local data struct for bmb information
     TelemetryTaskOutputData_S telemetryTaskOutputDataLocal;
     TelemetryStaticData_S telemetryTaskStaticDataLocal;
-    //// Test Transaction
+    TRANSACTION_STATUS_E telemetryStatus = TRANSACTION_SUCCESS;
 
-    // WAKE BMBs
+    chainBreak = false;
 
-    // delayMicroseconds(5000);
-    // HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);
-    // delayMicroseconds(5000);
-    // HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET);
-
-    // Transaction
-
-    uint8_t rxBuff[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-    memset(rxBuff, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
-
-    uint8_t txBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-    memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
-
-
-    for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+    // If chain not initialized, attempt to init
+    if(!chainInitialized)
     {
-        static uint8_t reg = 0;
-        txBuffer[(REGISTER_SIZE_BYTES * i) + 3] = reg;
-        reg++;
-        if(reg > 0x0F)
-        {
-            reg = 0;
-        }
+        chainInitialized = initChain();
+    }
+    else
+    {
+        // Ready up isospi comms
+        readyChain(NUM_BMBS_IN_ACCUMULATOR);
+
+        telemetryStatus = updateTestData(&telemetryTaskOutputDataLocal);
+
+        // if(telemetryStatus == TRANSACTION_SUCCESS)
+        // {
+
+        // }
     }
 
-    readyChain(NUM_BMBS_IN_ACCUMULATOR);
 
-    writeChain(0x0001, NUM_BMBS_IN_ACCUMULATOR, txBuffer);
+    // Regardless of whether or not chain initialized, run alert monitor stuff
 
-    TRANSACTION_STATUS_E status = readChain(0x0002, NUM_BMBS_IN_ACCUMULATOR, rxBuff);
+    // Blah blah alert monitor
 
-    for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+    // TODO Handle case of continous POR / CC errors here
+
+    if(telemetryStatus == TRANSACTION_SUCCESS || telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR)
     {
-        telemetryTaskOutputDataLocal.bmb[i].testStatus = status;
-        for(int32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
-        {
-            telemetryTaskOutputDataLocal.bmb[i].testData[j] = rxBuff[j + (i * REGISTER_SIZE_BYTES)];
-        }
+        // Copy out new data into global data struct
+        taskENTER_CRITICAL();
+        telemetryTaskOutputData = telemetryTaskOutputDataLocal;
+        taskEXIT_CRITICAL();  
     }
-
-    //test status = to the error code we get back from the read register function 
-
-    //// End test transaction
-
-    taskENTER_CRITICAL();
-    telemetryTaskOutputData = telemetryTaskOutputDataLocal;
-    taskEXIT_CRITICAL();
 
 }
 
