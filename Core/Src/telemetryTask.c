@@ -7,6 +7,7 @@
 #include "cmsis_os.h"
 #include "utils.h"
 #include "debug.h"
+#include "soc.h"
 #include <string.h>
 #include <stdbool.h>
 
@@ -19,10 +20,6 @@
 #define NUM_COMMAND_BLOCK_RETRYS            3
 #define NUM_READS  100
 
-#define SNAP_COMMAND 0x2D
-#define UNSNAP_COMMAND 0X2F
-#define RDFLAG_COMMAND 0x72 //WITHOUT error injection (1) with artificial error injection (0)
-#define RDIACC_COMMAND 0x44
 
 
 #define CONVERSION_MULTI 36  //conversion time (need to change)
@@ -53,6 +50,15 @@ bool chainInitialized;
 bool chainBreak;
 
 PORT_E port = PORTA;
+
+Soc_S soc = {.milliCoulombCounter = 0, 
+            .socByOcvQualificationTimer = (Timer_S){.timCount = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS, .lastUpdate = 0, .timThreshold = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS}, 
+            .socByOcv = 0, 
+            .soeByOcv = 0,
+            .socByCoulombCounting = 0, 
+            .socByCoulombCounting = 0};
+
+
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
@@ -155,13 +161,6 @@ static TRANSACTION_STATUS_E updateTestData(TelemetryTaskOutputData_S *taskData)
     }
     return TRANSACTION_COMMAND_COUNTER_ERROR;
 }
-Soc_S soc = {.milliCoulombCounter = 0, 
-            .socByOcvQualificationTimer = (Timer_S){.timCount = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS, .lastUpdate = 0, .timThreshold = SOC_BY_OCV_GOOD_QUALIFICATION_TIME_MS}, 
-            .socByOcv = 0, 
-            .soeByOcv = 0,
-            .socByCoulombCounting = 0, 
-            .socByCoulombCounting = 0};
-
 
 
 /* ==================================================================== */
@@ -232,13 +231,13 @@ static void updateCoulombCounter(Soc_S soc, PORT_E port){
     memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
 
-    // //read conversion counter and current
-    // uint16_t I1CNT = readRegister(RDIACC_COMMAND, NUM_BMBS_IN_ACCUMULATOR, rxBuff, port);
-    // //calculate conversion time
-    // float t_conv = TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
+    //read conversion counter and current
+    uint16_t I1CNT = readPackMonitor(RDIACC_COMMAND, NUM_BMBS_IN_ACCUMULATOR, rxBuff, port);
+    //calculate conversion time
+    float t_conv = TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
 
-    // // calculate charge using coulomb counting formula
-    // float charge = t_conv * (RDIACC_COMMAND * IADC_LSB);
+    // calculate charge using coulomb counting formula
+    float charge = t_conv * (RDIACC_COMMAND * IADC_LSB);
 }
 /*
 TODO: 
