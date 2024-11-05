@@ -15,10 +15,10 @@
 /* ==================================================================== */
 #define NUM_READS  100
 
-#define SNAP_COMMAND 0x002D
-#define UNSNAP_COMMAND 0X002F
-#define RDFLAG_COMMAND //idk what the command code is yet
-#define RDIACC_COMMAND 0x0044
+#define SNAP_COMMAND 0x2D
+#define UNSNAP_COMMAND 0X2F
+#define RDFLAG_COMMAND 0x72 //WITHOUT error injection (1) with artificial error injection (0)
+#define RDIACC_COMMAND 0x44
 
 
 #define CONVERSION_MULTI 36  //conversion time (need to change)
@@ -45,6 +45,7 @@ typedef struct
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
 
+PORT_E port = PORTA;
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
@@ -148,7 +149,6 @@ static void updateCoulombCounter(Soc_S soc, PORT_E port){
 
     uint8_t txBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
     memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
-
 
 
     // //read conversion counter and current
