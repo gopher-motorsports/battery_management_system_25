@@ -53,7 +53,7 @@ typedef enum
 bool chainInitialized;
 MUX_STATE_E muxState;
 
-uint8_t bmbOrder[NUM_BMBS_IN_ACCUMULATOR] = 
+uint8_t bmbOrder[NUM_BMBS_IN_ACCUMULATOR] =
 {
     BMB0_SEGMENT_INDEX
     // BMB1_SEGMENT_INDEX
@@ -220,7 +220,7 @@ static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, u
     {
         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
         {
-            float adcVoltage = CONVERT_VADC((bmbData + (j * REGISTER_SIZE_BYTES) + (i * CELL_REG_SIZE)));   
+            float adcVoltage = CONVERT_VADC((bmbData + (j * REGISTER_SIZE_BYTES) + (i * CELL_REG_SIZE)));
             bmbArray[bmbOrder[j]].cellTemp[(cellStartIndex + i)] = adcVoltage;
             bmbArray[bmbOrder[j]].cellTempStatus[(cellStartIndex + i)] = GOOD;
         }
@@ -237,7 +237,7 @@ static TRANSACTION_STATUS_E runSystemDiagnostics(TelemetryTaskOutputData_S *task
     TRANSACTION_STATUS_E status;
 
     for(int32_t attempt = 0; attempt < NUM_COMMAND_BLOCK_RETRYS; attempt++)
-    {   
+    {
         // Read status register group C
         status = readChain(RDSTATC, NUM_DEVICES_IN_ACCUMULATOR, rxBuffer);
         HANDLE_ISOSPI_ERROR(status);
@@ -433,7 +433,7 @@ static TRANSACTION_STATUS_E updateCellTemps(TelemetryTaskOutputData_S *taskData)
 
         for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
         {
-            float adcVoltage = CONVERT_VADC((rxBuffer + (i * REGISTER_SIZE_BYTES) + (2 * CELL_REG_SIZE)));   
+            float adcVoltage = CONVERT_VADC((rxBuffer + (i * REGISTER_SIZE_BYTES) + (2 * CELL_REG_SIZE)));
             taskData->bmb[bmbOrder[i]].boardTemp = adcVoltage;
             taskData->bmb[bmbOrder[i]].boardTempStatus = GOOD;
         }
@@ -551,9 +551,8 @@ void runTelemetryTask()
     if(telemetryStatus == TRANSACTION_SUCCESS || telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR)
     {
         // Copy out new data into global data struct
-        taskENTER_CRITICAL();
+        vTaskSuspendAll();
         telemetryTaskOutputData = telemetryTaskOutputDataLocal;
-        taskEXIT_CRITICAL();  
+        xTaskResumeAll();
     }
-
 }

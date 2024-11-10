@@ -17,7 +17,7 @@
 #define CRC_SIZE_BYTES          2
 #define CRC_LUT_SIZE            256
 
-// These crc values are left shifted 1 from the ADBMS6830 15bit crc 
+// These crc values are left shifted 1 from the ADBMS6830 15bit crc
 // This prevents the need for a left shift after every crc calculation
 #define CRC_CMD_SEED            0x0020
 #define CRC_CMD_POLY            0x8B32
@@ -65,7 +65,7 @@ typedef enum
     MULTIPLE_CHAIN_BREAK = 0,
     SINGLE_CHAIN_BREAK,
     CHAIN_COMPLETE
-} CHAIN_STATUS_E; 
+} CHAIN_STATUS_E;
 
 /* ==================================================================== */
 /* ============================== STRUCTS============================== */
@@ -85,7 +85,7 @@ typedef struct
 /* ============================ CRC TABLES ============================ */
 /* ==================================================================== */
 
-uint16_t commandCrcTable[CRC_LUT_SIZE] = 
+uint16_t commandCrcTable[CRC_LUT_SIZE] =
 {
     0x0000, 0x8B32, 0x9D56, 0x1664, 0xB19E, 0x3AAC, 0x2CC8, 0xA7FA, 0xE80E, 0x633C, 0x7558, 0xFE6A, 0x5990, 0xD2A2, 0xC4C6, 0x4FF4,
     0x5B2E, 0xD01C, 0xC678, 0x4D4A, 0xEAB0, 0x6182, 0x77E6, 0xFCD4, 0xB320, 0x3812, 0x2E76, 0xA544, 0x02BE, 0x898C, 0x9FE8, 0x14DA,
@@ -105,7 +105,7 @@ uint16_t commandCrcTable[CRC_LUT_SIZE] =
     0x4EDE, 0xC5EC, 0xD388, 0x58BA, 0xFF40, 0x7472, 0x6216, 0xE924, 0xA6D0, 0x2DE2, 0x3B86, 0xB0B4, 0x174E, 0x9C7C, 0x8A18, 0x012A
 };
 
-uint16_t dataCrcTable[CRC_LUT_SIZE] = 
+uint16_t dataCrcTable[CRC_LUT_SIZE] =
 {
     0x0000, 0x048F, 0x091E, 0x0D91, 0x123C, 0x16B3, 0x1B22, 0x1FAD, 0x24F7, 0x2078, 0x2DE9, 0x2966, 0x36CB, 0x3244, 0x3FD5, 0x3B5A,
     0x49EE, 0x4D61, 0x40F0, 0x447F, 0x5BD2, 0x5F5D, 0x52CC, 0x5643, 0x6D19, 0x6996, 0x6407, 0x6088, 0x7F25, 0x7BAA, 0x763B, 0x72B4,
@@ -156,11 +156,11 @@ static void resetCommandCounter(uint32_t numDevs);
 static void openPort(PORT_E port)
 {
     if(port == PORTA)
-    {        
+    {
         HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_RESET);
     }
     else if(port == PORTB)
-    {   
+    {
         HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_RESET);
     }
 }
@@ -168,7 +168,7 @@ static void openPort(PORT_E port)
 static void closePort(PORT_E port)
 {
     if(port == PORTA)
-    {        
+    {
         HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
     }
     else if(port == PORTB)
@@ -180,14 +180,14 @@ static void closePort(PORT_E port)
 static void activatePort(uint32_t numDevs, PORT_E port, uint32_t usDelay)
 {
     if(port == PORTA)
-    {        
+    {
         for(uint32_t i = 0; i < numDevs+1; i++)
         {
             HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_RESET);
             HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
             delayMicroseconds(usDelay);
             // vTaskDelay(1);
-        }   
+        }
     }
     else if(port == PORTB)
     {
@@ -196,7 +196,7 @@ static void activatePort(uint32_t numDevs, PORT_E port, uint32_t usDelay)
             HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_RESET);
             HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_SET);
             delayMicroseconds(usDelay);
-            // vTaskDelay(1);  
+            // vTaskDelay(1);
         }
     }
 }
@@ -212,7 +212,7 @@ static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes)
     {
         // Determine the next look up table index from the current crc and next data byte
         uint8_t index = (uint8_t)((crc >> (CRC_CMD_SIZE - BITS_IN_BYTE)) ^ packet[i]);
-        
+
         // Calculate the next intermediate crc from the current crc and look up table
         crc = ((crc << BITS_IN_BYTE) ^ (uint16_t)(commandCrcTable[index]));
     }
@@ -230,7 +230,7 @@ static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t com
     {
         // Determine the next look up table index from the current crc and next data byte
         uint8_t index = (uint8_t)((crc >> (CRC_DATA_SIZE - BITS_IN_BYTE)) ^ packet[i]);
-        
+
         // Calculate the next intermediate crc from the current crc and look up table
         crc = ((crc << BITS_IN_BYTE) ^ (uint16_t)(dataCrcTable[index]));
     }
@@ -240,7 +240,7 @@ static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t com
 
     // Determine the next look up table index from the current crc and next data byte
     uint8_t index = (uint8_t)((crc >> (CRC_DATA_SIZE - COMMAND_COUNTER_BITS)) ^ commandCounter);
-    
+
     // Calculate the next intermediate crc from the current crc and look up table
     crc = ((crc << COMMAND_COUNTER_BITS) ^ (uint16_t)(dataCrcTable[index]));
 
@@ -287,7 +287,7 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
     // Create a transmit message buffer and a dummy rx buffer
     uint8_t txBuffer[packetLength];
     uint8_t rxBuffer[packetLength];
-    
+
     // Populate the tx buffer with the command word
     txBuffer[0] = (uint8_t)(command >> BITS_IN_BYTE);
     txBuffer[1] = (uint8_t)(command);
@@ -297,7 +297,7 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
     txBuffer[2] = (uint8_t)(commandCRC >> BITS_IN_BYTE);
     txBuffer[3] = (uint8_t)(commandCRC);
 
-    // For each bmb, append a copy of the register data and corresponding CRC to the tx buffer  
+    // For each bmb, append a copy of the register data and corresponding CRC to the tx buffer
     for(uint32_t i = 0; i < numDevs; i++)
     {
         // Calculate the CRC on the register data packet (2 byte CRC on 6 byte packet)
@@ -307,13 +307,13 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
         {
             memcpy(txBuffer + COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH), txBuff + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
             txBuffer[COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES] = (uint8_t)(dataCRC >> BITS_IN_BYTE);
-            txBuffer[COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1] = (uint8_t)(dataCRC); 
+            txBuffer[COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1] = (uint8_t)(dataCRC);
         }
         else
         {
             memcpy(txBuffer + COMMAND_PACKET_LENGTH + ((numDevs - i - 1) * REGISTER_PACKET_LENGTH), txBuff + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
             txBuffer[COMMAND_PACKET_LENGTH + ((numDevs - i - 1) * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES] = (uint8_t)(dataCRC >> BITS_IN_BYTE);
-            txBuffer[COMMAND_PACKET_LENGTH + ((numDevs - i - 1) * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1] = (uint8_t)(dataCRC); 
+            txBuffer[COMMAND_PACKET_LENGTH + ((numDevs - i - 1) * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1] = (uint8_t)(dataCRC);
         }
     }
 
@@ -325,7 +325,6 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
         return TRANSACTION_SPI_ERROR;
     }
     closePort(port);
-    
     return TRANSACTION_SUCCESS;
 }
 
@@ -340,7 +339,7 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
 
     // Clear tx buffer array
     memset(txBuffer, 0, packetLength);
-    
+
     // Populate the tx buffer with the command word
     txBuffer[0] = (uint8_t)(command >> BITS_IN_BYTE);
     txBuffer[1] = (uint8_t)(command);
@@ -356,7 +355,7 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
         openPort(port);
         if(SPI_TRANSMIT(HAL_SPI_TransmitReceive_IT, &hspi1, SPI_TIMEOUT_MS, txBuffer, rxBuffer, packetLength) != SPI_SUCCESS)
         {
-            // On SPI failure, immediately return SPI error 
+            // On SPI failure, immediately return SPI error
             closePort(port);
             return TRANSACTION_SPI_ERROR;
         }
@@ -387,7 +386,7 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
                 // }
 
                 returnStatus = TRANSACTION_CHAIN_BREAK_ERROR;
-                break;
+                break; // Remove break
             }
 
             // If there is a command counter error, track the error to be returned later
@@ -401,18 +400,18 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
                 else
                 {
                     returnStatus = TRANSACTION_POR_ERROR;
-                }      
+                }
             }
 
             // Populate rx buffer with local register data
             // This happens only if there is no crc error, but regardless of if there is a command counter error
             if(port == PORTA)
             {
-                memcpy(rxBuff + (j * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES); 
+                memcpy(rxBuff + (j * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
             }
             else
             {
-                memcpy(rxBuff + ((numDevs - j - 1) * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES); 
+                memcpy(rxBuff + ((numDevs - j - 1) * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
             }
         }
 
@@ -434,13 +433,13 @@ static TRANSACTION_STATUS_E updateChainStatus(uint32_t numDevs)
     // activatePort(numDevs, PORTA, TIME_WAKE_US);
     // activatePort(numDevs, PORTB, TIME_WAKE_US);
 
-    // Create dummy buffer for read command  
+    // Create dummy buffer for read command
     uint8_t rxBuff[numDevs * REGISTER_SIZE_BYTES];
 
     TRANSACTION_STATUS_E returnStatus = TRANSACTION_SUCCESS;
 
     // Attempt to read from an increasing number of bmbs from each port
-    // Set availableBmbs to the number of bmbs reachable 
+    // Set availableBmbs to the number of bmbs reachable
     for(int32_t port = 0; port < NUM_PORTS; port++)
     {
         chainInfo.availableDevices[port] = numDevs;
@@ -487,7 +486,6 @@ static TRANSACTION_STATUS_E updateChainStatus(uint32_t numDevs)
     }
 
     return returnStatus;
-    
 }
 
 static void resetCommandCounter(uint32_t numDevs)
@@ -514,8 +512,6 @@ void wakeChain(uint32_t numDevs)
     }
 }
 
-
-
 void readyChain(uint32_t numDevs)
 {
     if(chainInfo.chainStatus == CHAIN_COMPLETE)
@@ -538,7 +534,7 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numDevs)
             // When the chain is complete, send the command using the current origin port
             // sendCommand will return either success or a spi error
             TRANSACTION_STATUS_E status = sendCommand(command, chainInfo.originPort);
-            
+
             // Increment command counter
             chainInfo.localCommandCounter++;
             if(chainInfo.localCommandCounter > 63)
@@ -551,8 +547,8 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numDevs)
         {
             // If there are any chain breaks, use both ports to reach as many bmbs as possible
             TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (sendCommand(command, PORTA)) : (TRANSACTION_SUCCESS);
-            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (sendCommand(command, PORTB)) : (TRANSACTION_SUCCESS); 
-            
+            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (sendCommand(command, PORTB)) : (TRANSACTION_SUCCESS);
+
             // Increment command counter
             chainInfo.localCommandCounter++;
             if(chainInfo.localCommandCounter > 63)
@@ -566,7 +562,7 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numDevs)
                 // For a single chain break, the transaction can be marked as successful, because all devices were reached
                 if(chainInfo.chainStatus == SINGLE_CHAIN_BREAK)
                 {
-                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away 
+                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away
                     chainInfo.numDualPortTransactions++;
                     if(chainInfo.numDualPortTransactions > DUAL_PORT_TRANSACTIONS_BEFORE_RETRY)
                     {
@@ -584,7 +580,7 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numDevs)
                     }
 
                     // If every bmb is successfully reached, return success
-                    return TRANSACTION_SUCCESS; 
+                    return TRANSACTION_SUCCESS;
                 }
                 else
                 {
@@ -645,7 +641,7 @@ TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numDevs, uint8_t *txD
         {
             // If there are any chain breaks, use both ports to reach as many bmbs as possible
             TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (writeRegister(command, chainInfo.availableDevices[PORTA], txData, PORTA)) : (TRANSACTION_SUCCESS);
-            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (writeRegister(command, chainInfo.availableDevices[PORTB], txData + REGISTER_SIZE_BYTES * (numDevs - chainInfo.availableDevices[PORTB]), PORTB)) : (TRANSACTION_SUCCESS); 
+            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (writeRegister(command, chainInfo.availableDevices[PORTB], txData + REGISTER_SIZE_BYTES * (numDevs - chainInfo.availableDevices[PORTB]), PORTB)) : (TRANSACTION_SUCCESS);
 
             // Increment command counter
             chainInfo.localCommandCounter++;
@@ -660,7 +656,7 @@ TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numDevs, uint8_t *txD
                 // For a single chain break, the transaction can be marked as successful, because all devices were reached
                 if(chainInfo.chainStatus == SINGLE_CHAIN_BREAK)
                 {
-                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away 
+                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away
                     chainInfo.numDualPortTransactions++;
                     if(chainInfo.numDualPortTransactions > DUAL_PORT_TRANSACTIONS_BEFORE_RETRY)
                     {
@@ -678,7 +674,7 @@ TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numDevs, uint8_t *txD
                     }
 
                     // If every bmb is successfully reached, return success
-                    return TRANSACTION_SUCCESS; 
+                    return TRANSACTION_SUCCESS;
                 }
                 else
                 {
@@ -748,14 +744,14 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numDevs, uint8_t *rxDa
         {
             // If there are any chain breaks, use both ports to reach as many bmbs as possible
             TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (readRegister(command, chainInfo.availableDevices[PORTA], rxData, PORTA)) : (TRANSACTION_SUCCESS);
-            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (readRegister(command, chainInfo.availableDevices[PORTB], rxData + REGISTER_SIZE_BYTES * (numDevs - chainInfo.availableDevices[PORTB]), PORTB)) : (TRANSACTION_SUCCESS); 
+            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (readRegister(command, chainInfo.availableDevices[PORTB], rxData + REGISTER_SIZE_BYTES * (numDevs - chainInfo.availableDevices[PORTB]), PORTB)) : (TRANSACTION_SUCCESS);
 
             if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
             {
                 // For a single chain break, the transaction can be marked as successful, because all devices were reached
                 if(chainInfo.chainStatus == SINGLE_CHAIN_BREAK)
                 {
-                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away 
+                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away
                     chainInfo.numDualPortTransactions++;
                     if(chainInfo.numDualPortTransactions > DUAL_PORT_TRANSACTIONS_BEFORE_RETRY)
                     {
@@ -773,7 +769,7 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numDevs, uint8_t *rxDa
                     }
 
                     // If every bmb is successfully reached, return success
-                    return TRANSACTION_SUCCESS; 
+                    return TRANSACTION_SUCCESS;
                 }
                 else
                 {
@@ -803,7 +799,7 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numDevs, uint8_t *rxDa
             else if((portAStatus == TRANSACTION_POR_ERROR) || (portBStatus == TRANSACTION_POR_ERROR))
             {
                 resetCommandCounter(numDevs);
-                return TRANSACTION_COMMAND_COUNTER_ERROR;
+                return TRANSACTION_POR_ERROR;
             }
             else if((portAStatus == TRANSACTION_COMMAND_COUNTER_ERROR) || (portBStatus == TRANSACTION_COMMAND_COUNTER_ERROR))
             {
@@ -830,4 +826,3 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numDevs, uint8_t *rxDa
     // This should only be reached if the chain status does not get updated properly the first time
     return TRANSACTION_CHAIN_BREAK_ERROR;
 }
-
