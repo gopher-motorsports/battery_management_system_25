@@ -54,6 +54,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../../Core/Src/utils.c
 )
 
+# Enable floating point support for printf
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -u _printf_float")
+
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
