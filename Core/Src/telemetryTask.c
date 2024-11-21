@@ -261,55 +261,55 @@ TODO:
 //     sendCommand(RDIACC, port);
 // }
 
-// void countCoulombs(Soc_S* soc, PORT_E port) {
-//     // Read the accumulated conversion results from IxACC
-//     uint16_t IxACC = calculateAccReg();
-//     float t_conv = calculateADCConversionTime();
-
-//     // calculate charge using coulomb counting formula
-//     float charge = t_conv * (IxACC * IADC_LSB);
-    
-//     // update CC in mC
-//     soc->coulombCounter.accumulatedMilliCoulombs += charge * 1000; 
-
-// }
-
-// float calculateADCConversionTime(void) {
-
-//     return TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
-// }
 
 
-// float calculateAccReg(){
-//     return sendCommand(RDIACC, port);
-// }
+static float calculateDeltaCoulombs() {
+    uint8_t rxBuff[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(rxBuff, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
-// float calculateConvCounter(){
-//     uint16_t I1CNTPHA = sendCommand(RDFLAG, port);
-//     return  I1CNTPHA >> 2; //get I1CNT by itself
-// }
+    // Read the accumulated conversion results
+    TRANSACTION_STATUS_E status = readPackMonitor(RDIACC, NUM_BMBS_IN_ACCUMULATOR, PORTA, rxBuff);
+    if (status != TRANSACTION_SUCCESS) {
+        // Handle error
+    }
 
+    // Convert rxBuff to the current measurement value
+    uint16_t IxACC = rxBuff[0];
+    // Calculate charge using the formula: charge = current * time
+    float charge = IxACC * IADC_LSB * (TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI);
 
-// void updateSOCandSOEbyCC(Soc_S* soc, PORT_E port) {
-//     static uint16_t N = 1;
-//     static uint16_t I1CNT_OLD = 0;
+    soc->coulombCounter.accumulatedMilliCoulombs += charge * 1000; 
 
-//     //perform the read sequence
-//     readSequence(port);
+}
 
-//     uint16_t I1CNT = calculateConvCounter();
+static void updateCoulombCounter(Soc_S *soc, PORT_E port) {
+    static uint16_t N = 1;
+    static uint16_t I1CNT_OLD = 0;
 
-//     // Check rollover
-//     if (I1CNT < I1CNT_OLD) {
-//         N = 0;
-//     }
+    uint8_t rxBuff[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(rxBuff, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
-//     // Check if new conversion is available
-//     if (I1CNT >= N * 8) {
-//         N++;
-//         countCoulombs(soc, port);  // Count the new coulombs
-//         calculateSocAndSoeByCC(soc); // Update SOC and SOE based on CC
-//     }
+    // Read conversion counter and current
+    uint16_t I1CNT = readRegister(RDFLAG_COMMAND, NUM_BMBS_IN_ACCUMULATOR, rxBuff, port);
+    uint16_t currentMeasurement = readRegister(RDIACC_COMMAND, NUM_BMBS_IN_ACCUMULATOR, rxBuff, port);
 
-//     I1CNT_OLD = I1CNT;  // Update I1CNT_OLD
-// }
+    // Calculate conversion time
+    float t_conv = TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
+
+    // Calculate delta coulombs
+    float deltaCoulombs = calculateDeltaCoulombs(currentMeasurement, t_conv);
+
+    // Update the coulomb counter
+    if (I1CNT < I1CNT_OLD) {
+        N = 0;
+    }
+
+    if (I1CNT >= N * 8) {
+        N = N + 1;
+        // Process new conversions read from IxACC (and VBxACC)
+        // Update the accumulation register with the new charge
+        soc->milliCoulombCounter += deltaCoulombs;
+    } 
+
+    I1CNT_OLD = I1CNT;
+}
