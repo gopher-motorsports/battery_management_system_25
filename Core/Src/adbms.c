@@ -839,22 +839,24 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numBmbs, uint8_t *rxDa
 
 
 
-TRANSACTION_STATUS_E readPackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *rxData){
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, PORT_E port, uint8_t *rxData){
     //it will read from only that port and return only the information of the number of devices
 
-    for (int32_t i = 0; i < 2; i++){
-        TRANSACTION_STATUS_E cmdStatus = readRegister(command, numBmbs, rxData, port);
-        if(cmdStatus == TRANSACTION_SUCCESS){
-            return TRANSACTION_SUCCESS;
-        }
-        else if(cmdStatus == TRANSACTION_SPI_ERROR){
-            return TRANSACTION_SPI_ERROR;
-        }
-        else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR){
-            resetCommandCounter(numBmbs);
-            return TRANSACTION_COMMAND_COUNTER_ERROR;
-        }
+
+    TRANSACTION_STATUS_E cmdStatus = readRegister(command, 1, rxData, port);
+    if(cmdStatus == TRANSACTION_SUCCESS){
+        return TRANSACTION_SUCCESS;
     }
+    else if(cmdStatus == TRANSACTION_SPI_ERROR){
+        return TRANSACTION_SPI_ERROR;
+    }
+    else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR){
+        resetCommandCounter(1);
+        return TRANSACTION_COMMAND_COUNTER_ERROR;
+    }
+//if cmmd or por, reset
+
+//return cmd status 
     
 }
 

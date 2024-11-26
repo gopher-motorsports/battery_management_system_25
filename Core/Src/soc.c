@@ -14,17 +14,6 @@
 
 #define TABLE_LENGTH 101
 
-//cmd codes
-#define RDFLAG  //idk what the command code is yet
-#define RDIACC  0x44
-#define UNSNAP  0x2F
-#define SNAP    0x2D
-
-
-
-
-#define CONVERSION_MULTI 36  //conversion time (need to change)
-#define IADC_LSB 1e-6
 
 static float getSocFromCellVoltage(float cellVoltage);
 static float getSoeFromSoc(float soc);

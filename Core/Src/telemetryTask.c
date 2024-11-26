@@ -220,7 +220,7 @@ void runTelemetryTask()
 
 }
 
-static void updateCoulombCounter(Soc_S soc, PORT_E port){
+static void updateCoulombCounter(Soc_S *soc, PORT_E port){
     static uint16_t N = 1;
     static uint16_t I1CNT_OLD = 0;
 
@@ -231,24 +231,10 @@ static void updateCoulombCounter(Soc_S soc, PORT_E port){
     memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
 
-    //read conversion counter and current
-    uint16_t I1CNT = readPackMonitor(RDIACC_COMMAND, NUM_BMBS_IN_ACCUMULATOR, rxBuff, port);
-    //calculate conversion time
-    float t_conv = TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
 
-    // calculate charge using coulomb counting formula
-    float charge = t_conv * (RDIACC_COMMAND * IADC_LSB);
-}
-/*
-TODO: 
-- draw current
-- accumulation reg
-- conversion time 
-- caluclate deltaMC
-*/
+//function that reads bunchof diff reg, where that data is info is relative to cells, update cells, realtie to current, update current sensors 
 
-// void readSequence(PORT_E port) {
-//     //unfreeze all registers
+    //read sequence
 //     sendCommand(UNSNAP, port);
 
 //     // freeze all registers
@@ -259,7 +245,33 @@ TODO:
 
 //     // get IxACC value (accumulator reg)
 //     sendCommand(RDIACC, port);
-// }
+
+
+
+    //read conversion counter and current
+    TRANSACTION_STATUS_E packStatus = readPackMonitor(RDIACC_COMMAND, NUM_BMBS_IN_ACCUMULATOR, rxBuff, port);
+    //calculate conversion time
+    float t_conv = TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
+
+    // calculate charge using coulomb counting formula
+    float charge = t_conv * (rxBuff[0] * IADC_LSB);
+
+    // update CC in mC
+    soc->milliCoulombCounter += charge * 1000; 
+}
+
+
+
+
+/*
+TODO: 
+- draw current
+- accumulation reg
+- conversion time 
+- caluclate deltaMC
+*/
+
+
 
 // void countCoulombs(Soc_S* soc, PORT_E port) {
 //     // Read the accumulated conversion results from IxACC
@@ -272,11 +284,6 @@ TODO:
 //     // update CC in mC
 //     soc->coulombCounter.accumulatedMilliCoulombs += charge * 1000; 
 
-// }
-
-// float calculateADCConversionTime(void) {
-
-//     return TELEMETRY_TASK_PERIOD_MS / CONVERSION_MULTI;
 // }
 
 
