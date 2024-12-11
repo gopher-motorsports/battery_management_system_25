@@ -147,7 +147,8 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
 static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uint8_t *rxBuffer, PORT_E port);
 static TRANSACTION_STATUS_E updateChainStatus(uint32_t numDevs);
 static void resetCommandCounter(uint32_t numDevs);
-
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *rxData);
+TRANSACTION_STATUS_E writePackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *txData);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
@@ -825,4 +826,40 @@ TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numDevs, uint8_t *rxDa
 
     // This should only be reached if the chain status does not get updated properly the first time
     return TRANSACTION_CHAIN_BREAK_ERROR;
+}
+
+
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *rxData){
+    //it will read from only that port and return only the information of the number of devices
+
+
+    TRANSACTION_STATUS_E cmdStatus = readRegister(command, 1, rxData, port);
+    if(cmdStatus == TRANSACTION_SUCCESS){
+        return TRANSACTION_SUCCESS;
+    }
+    else if(cmdStatus == TRANSACTION_SPI_ERROR){
+        return TRANSACTION_SPI_ERROR;
+    }
+    else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR){
+        resetCommandCounter(1);
+        return TRANSACTION_COMMAND_COUNTER_ERROR;
+    }
+//if cmmd or por, reset
+
+//return cmd status 
+    
+}
+
+
+TRANSACTION_STATUS_E writePackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *txData){
+
+        TRANSACTION_STATUS_E status = writeRegister(command, numBmbs, txData, port);
+        // Increment command counter
+        chainInfo.localCommandCounter++;
+        if(chainInfo.localCommandCounter > 63)
+        {
+            chainInfo.localCommandCounter = 1;
+        }
+
+        return status;
 }
