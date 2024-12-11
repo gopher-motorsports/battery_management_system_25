@@ -168,7 +168,7 @@ static void printCellTemps(Bmb_S* bmb)
 
 void initPrintTask()
 {
-    
+
 }
 
 void runPrintTask()

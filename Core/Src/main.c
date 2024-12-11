@@ -142,7 +142,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   // while (1){
-    
+
   //   printf("hi");
 
   // }
@@ -450,7 +450,7 @@ void startTelemetryTask(void const * argument)
     // uint32_t taskStart = HAL_GetTick();
     runTelemetryTask();
     // printf("%lu\n", (HAL_GetTick()-taskStart));
-    
+
     vTaskDelayUntil(&lastTelemetryTaskTick, telemetryTaskPeriod);
   }
   /* USER CODE END 5 */
