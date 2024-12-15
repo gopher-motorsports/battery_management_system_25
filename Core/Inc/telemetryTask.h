@@ -15,6 +15,8 @@
 #define NUM_BMBS_IN_ACCUMULATOR     1
 #define NUM_DEVICES_IN_ACCUMULATOR  (NUM_PACK_MON_IN_ACCUMULATOR + NUM_BMBS_IN_ACCUMULATOR)
 
+#define PACK_MONITOR_PORT           PORTA
+
 // Use this to configure the order of the daisychain in the accumulator
 // BMB0 is the first BMB connected to PORT A, assign the desired segment index here
 #define BMB0_SEGMENT_INDEX  0
@@ -45,7 +47,7 @@ typedef enum
 
 
 typedef struct
-{   
+{
     float cellVoltage[NUM_CELLS_PER_BMB];
     SENSOR_STATUS_E cellVoltageStatus[NUM_CELLS_PER_BMB];
 
@@ -54,12 +56,14 @@ typedef struct
 
     float boardTemp;
     SENSOR_STATUS_E boardTempStatus;
-    
+
 } Bmb_S;
 
 typedef struct
 {
 	Bmb_S bmb[NUM_BMBS_IN_ACCUMULATOR];
+
+    CHAIN_INFO_S chainInfo;
 
     float IADC1;
     float IADC2;
@@ -70,7 +74,7 @@ typedef struct
     uint8_t testData[NUM_DEVICES_IN_ACCUMULATOR][REGISTER_SIZE_BYTES];
     TRANSACTION_STATUS_E testStatus[NUM_DEVICES_IN_ACCUMULATOR];
 
-} TelemetryTaskOutputData_S;
+} telemetryTaskData_S;
 
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DECLARATIONS =================== */
