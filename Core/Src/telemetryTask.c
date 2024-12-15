@@ -7,6 +7,7 @@
 #include "cmsis_os.h"
 #include "utils.h"
 #include "debug.h"
+#include "lookupTable.h"
 #include <string.h>
 #include <stdbool.h>
 
@@ -33,6 +34,9 @@
 
 #define NUM_CELLV_REGISTERS 6
 #define NUM_AUXV_REGISTERS  3
+
+// The number of values contained in the temperature lookup table
+#define TEMP_LUT_SIZE 33
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -81,6 +85,24 @@ uint16_t readAuxReg[NUM_AUXV_REGISTERS] =
     RDAUXB,
     RDAUXC
 };
+
+const float temperatureArray[TEMP_LUT_SIZE] =
+{
+    120, 115, 110, 105, 100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0, -5, -10, -15, -20, -25, -30, -35, -40
+};
+
+const float cellTempVoltageArray[TEMP_LUT_SIZE] =
+{
+    0.2919345638, 0.324518624, 0.3612309495, 0.402585263, 0.4491372839, 0.5014774689, 0.5602182763, 0.6259742709, 0.699333326, 0.7808173945, 0.8708320017, 0.969604948, 1.077116849, 1.193029083, 1.316618141, 1.44672857, 1.581758437, 1.71969016, 1.85817452, 1.994666667, 2.126601617, 2.25158619, 2.367578393, 2.473026369, 2.566947369, 2.648940056, 2.719136612, 2.778110865, 2.826762844, 2.866199204, 2.897624362, 2.922251328, 2.941235685
+};
+
+const float boardTempVoltageArray[TEMP_LUT_SIZE] =
+{
+    0.1741318359, 0.193533737, 0.2155192602, 0.2404628241, 0.2687907644, 0.3009857595, 0.3375901116, 0.3792069573, 0.4264981201, 0.480176881, 0.5409934732, 0.6097106855, 0.6870667304, 0.7737227417, 0.870193244, 0.976760075, 1.093373849, 1.219552143, 1.354289544, 1.496, 1.642514054, 1.791149899, 1.938865924, 2.082484747, 2.218959086, 2.345635446, 2.460468742, 2.562151894, 2.650145243, 2.724613713, 2.786297043, 2.836345972, 2.87615517
+};
+
+LookupTable_S cellTempTable =  { .length = TEMP_LUT_SIZE, .x = cellTempVoltageArray, .y = temperatureArray};
+LookupTable_S boardTempTable = { .length = TEMP_LUT_SIZE, .x = boardTempVoltageArray, .y = temperatureArray};
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
@@ -193,7 +215,7 @@ static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, B
         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
         {
             float adcVoltage = CONVERT_VADC((bmbData + (j * REGISTER_SIZE_BYTES) + (i * CELL_REG_SIZE)));
-            bmbArray[bmbOrder[j]].cellTemp[(cellStartIndex + (i * 2))] = adcVoltage;
+            bmbArray[bmbOrder[j]].cellTemp[(cellStartIndex + (i * 2))] = lookup(adcVoltage, &cellTempTable);
             bmbArray[bmbOrder[j]].cellTempStatus[(cellStartIndex + (i * 2))] = GOOD;
         }
     }
@@ -404,7 +426,7 @@ static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
         for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
         {
             float adcVoltage = CONVERT_VADC((rxBuffer[NUM_AUXV_REGISTERS-1] + (REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR) + (i * REGISTER_SIZE_BYTES) + (2 * CELL_REG_SIZE)));
-            taskData->bmb[bmbOrder[i]].boardTemp = adcVoltage;
+            taskData->bmb[bmbOrder[i]].boardTemp = lookup(adcVoltage, &boardTempTable);
             taskData->bmb[bmbOrder[i]].boardTempStatus = GOOD;
         }
 
