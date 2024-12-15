@@ -14,14 +14,14 @@
 
 typedef struct
 {
-    TelemetryTaskOutputData_S telemetryTaskData;
+    telemetryTaskData_S telemetryTaskData;
 } PrintTaskInputData_S;
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
-static void printTestData(Bmb_S* bmb);
+// static void printTestData(Bmb_S* bmb);
 static void printCellVoltages(Bmb_S* bmb);
 static void printCellTemps(Bmb_S* bmb);
 
@@ -67,7 +67,7 @@ static void printCellVoltages(Bmb_S* bmb)
 static void printCellTemps(Bmb_S* bmb)
 {
     printf("Cell Temp:\n");
-    printf("|   BMB   |");
+    printf("|   BMB    |");
     for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
         printf("     %02ld    |", i);
@@ -75,18 +75,18 @@ static void printCellTemps(Bmb_S* bmb)
     printf("\n");
     for(int32_t i = 0; i < NUM_CELLS_PER_BMB; i++)
     {
-        printf("|    %02ld   |", i+1);
+        printf("|    %02ld    |", i+1);
         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
         {
             if(bmb[j].cellTempStatus[i] == GOOD)
             {
                 if((bmb[j].cellTemp[i] < 0.0f) || bmb[j].cellTemp[i] >= 100.0f)
                 {
-                    printf("   %3.1f   |", (double)bmb[j].cellTemp[i]);
+                    printf("   %3.1f    |", (double)bmb[j].cellTemp[i]);
                 }
                 else
                 {
-                    printf("    %3.1f   |", (double)bmb[j].cellTemp[i]);
+                    printf("    %3.1f    |", (double)bmb[j].cellTemp[i]);
                 }
             }
             else
@@ -96,18 +96,18 @@ static void printCellTemps(Bmb_S* bmb)
         }
         printf("\n");
     }
-    printf("|  Board  |");
+    printf("|  Board   |");
     for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
     {
         if(bmb[j].boardTempStatus == GOOD)
         {
             if((bmb[j].boardTemp < 0.0f) || bmb[j].boardTemp >= 100.0f)
             {
-                printf("   %3.1f   |", (double)bmb[j].boardTemp);
+                printf("   %3.1f    |", (double)bmb[j].boardTemp);
             }
             else
             {
-                printf("    %3.1f   |", (double)bmb[j].boardTemp);
+                printf("    %3.1f    |", (double)bmb[j].boardTemp);
             }
             // printf("  %04X", gBms.bmb[j].cellVoltage[i]);
         }
@@ -175,7 +175,7 @@ void runPrintTask()
 {
     PrintTaskInputData_S printTaskInputData;
     taskENTER_CRITICAL();
-    printTaskInputData.telemetryTaskData = telemetryTaskOutputData;
+    printTaskInputData.telemetryTaskData = telemetryTaskData;
     taskEXIT_CRITICAL();
 
     // Clear terminal output

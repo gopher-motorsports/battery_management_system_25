@@ -5,6 +5,7 @@
 /* ============================= INCLUDES ============================= */
 /* ==================================================================== */
 #include <stdint.h>
+#include <stdbool.h>
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -122,85 +123,85 @@
 #define RDPWMA 0x0022
 // Write PWM Register Group B
 #define WRPWMB 0x0021
-// Read PWM Register Group B 
+// Read PWM Register Group B
 #define RDPWMB 0x0023
-// LPCM Disable 
+// LPCM Disable
 #define CMDIS 0x0040
-// LPCM Enable 
+// LPCM Enable
 #define CMEN 0x0041
 // LPCM Heartbeat
 #define CMHB2 0x0043
 // Write LPCM Configuration Register
 #define WRCMCFG 0x0058
-//Read LPCM Configuration Register 
+//Read LPCM Configuration Register
 #define RDCMCFG 0x0059
-//Write LPCM Cell Threshold 
+//Write LPCM Cell Threshold
 #define WRCMCELLT 0x005A
-//Read LPCM Cell Threshold 
+//Read LPCM Cell Threshold
 #define RDCMCELLT 0x005B
-//Write LPCM GPIO Threshold 
+//Write LPCM GPIO Threshold
 #define WRCMGPIOT 0x005C
-//Read LPCM GPIO Threshold 
+//Read LPCM GPIO Threshold
 #define RDCMGPIOT 0x005D
-//Clear LPCM Flags 
+//Clear LPCM Flags
 #define CLRCMFLAG 0x005E
-//Read LPCM Flags 
+//Read LPCM Flags
 #define RDCMFLAG 0x005F
-//Start Cell Voltage ADC Conversion and Poll Status 
+//Start Cell Voltage ADC Conversion and Poll Status
 #define ADCV 0x0260
-//Start S-ADC Conversion and Poll Status 
+//Start S-ADC Conversion and Poll Status
 #define ADSV 0x0168
-//Start AUX ADC Conversions and Poll Status 
+//Start AUX ADC Conversions and Poll Status
 #define ADAX 0x0410
-//Start AUX2 ADC Conversions and Poll Status 
+//Start AUX2 ADC Conversions and Poll Status
 #define ADAX2 0x0400
-//Clear Cell Voltage Register Groups 
+//Clear Cell Voltage Register Groups
 #define CLRCELL 0x0711
-//Clear Filtered Cell Voltage Register Groups 
+//Clear Filtered Cell Voltage Register Groups
 #define CLRFC 0x0714
-//Clear Auxiliary Register Groups 
+//Clear Auxiliary Register Groups
 #define CLRAUX 0x0712
-//Clear S-Voltage Register Groups 
+//Clear S-Voltage Register Groups
 #define CLRSPIN 0x0716
-//Clear Flags 
+//Clear Flags
 #define CLRFLAG 0x0717
-//Clear OVUV 
+//Clear OVUV
 #define CLOVUV 0x0715
-//Poll Any ADC Status 
+//Poll Any ADC Status
 #define PLADC 0x0718
-//Poll C-ADC 
+//Poll C-ADC
 #define PLCADC 0x071C
-//Poll S-ADC 
+//Poll S-ADC
 #define PLSADC 0x071D
-//Poll AUX ADC 
+//Poll AUX ADC
 #define PLAUX 0x071E
-//Poll AUX2 ADC 
+//Poll AUX2 ADC
 #define PLAUX2 0x071F
-//Write COMM Register Group 
+//Write COMM Register Group
 #define WRCOMM 0x0721
-//Read COMM Register Group 
+//Read COMM Register Group
 #define RDCOMM 0x0722
-//Start I2C/SPI Communication 
+//Start I2C/SPI Communication
 #define STCOMM 0x0723
-//Mute Discharge 
+//Mute Discharge
 #define MUTE 0x0028
-//Unmute Discharge 
+//Unmute Discharge
 #define UNMUTE 0x0029
-//Read Serial ID Register Group 
+//Read Serial ID Register Group
 #define RDSID 0x002C
-//Reset Command Counter 
+//Reset Command Counter
 #define RSTCC 0x002E
-//Snapshot 
+//Snapshot
 #define SNAP 0x002D
-//Release Snapshot 
+//Release Snapshot
 #define UNSNAP 0x002F
-//Soft Reset 
+//Soft Reset
 #define SRST 0x0027
-//Unlock Retention Register 
+//Unlock Retention Register
 #define ULRR 0x0038
-//Write Retention Registers 
+//Write Retention Registers
 #define WRRR 0x0039
-//Read Retention Registers 
+//Read Retention Registers
 #define RDRR 0x003A
 
 // Register address configurations
@@ -218,7 +219,7 @@
 // ADC close odd open wire switches
 #define ADC_OW_ODD (1 << 1)
 // AUX ADC switch to pull up from pull down OW switches
-#define ADC_PUP (1 << 7) 
+#define ADC_PUP (1 << 7)
 
 // Status register C sleep bit
 #define STATC_SLEEP_BIT 0x08
@@ -238,17 +239,127 @@ typedef enum
     TRANSACTION_SUCCESS
 } TRANSACTION_STATUS_E;
 
+typedef enum
+{
+    SHARED_COMMAND = 0,
+    CELL_MONITOR_COMMAND,
+    PACK_MONITOR_COMMAND
+} COMMAND_TYPE_E;
+
+typedef enum
+{
+    CELL_MONITOR = 0,
+    PACK_MONITOR,
+    NUM_DEVICE_TYPES
+} DEVICE_TYPE_E;
+
+typedef enum
+{
+    PORTA = 0,
+    PORTB,
+    NUM_PORTS
+} PORT_E;
+
+typedef enum
+{
+    MULTIPLE_CHAIN_BREAK = 0,
+    SINGLE_CHAIN_BREAK,
+    CHAIN_COMPLETE
+} CHAIN_STATUS_E;
+
+/* ==================================================================== */
+/* ============================== STRUCTS============================== */
+/* ==================================================================== */
+
+typedef struct
+{
+    // Number of devices in the daisy chain
+    uint32_t numDevs;
+
+    // The port which is directly attached to the pack monitor
+    PORT_E packMonitorPort;
+
+    // The current status of the isospi chain
+    CHAIN_STATUS_E chainStatus;
+
+    // The number of reachable devices on each port
+    uint32_t availableDevices[NUM_PORTS];
+
+    // The current port to be used for isospi transactions
+    PORT_E currentPort;
+
+    // The local command counter tracker for pack and cell monitor devices
+    uint32_t localCommandCounter[NUM_DEVICE_TYPES];
+} CHAIN_INFO_S;
 
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
 
-void wakeChain(uint32_t numDevs);
-void readyChain(uint32_t numDevs);
-TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numDevs);
-TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numDevs, uint8_t *txData);
-TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numDevs, uint8_t *rxData);
+/**
+ * @brief Wake up the device daisy chain from sleep
+ * @param chainInfo Chain data struct
+ */
+void wakeChain(CHAIN_INFO_S *chainInfo);
 
+/**
+ * @brief Wake up the device daisy chain from idle
+ * @param chainInfo Chain data struct
+ */
+void readyChain(CHAIN_INFO_S *chainInfo);
+
+/**
+ * @brief Renumerate the device daisy chain to determine chain status
+ * @param chainInfo Chain data struct
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E updateChainStatus(CHAIN_INFO_S *chainInfo);
+
+/**
+ * @brief Send a command on the device daisy chain
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E commandChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType);
+
+/**
+ * @brief Write to device registers on the device daisy chain
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @param txData Byte array of data to write to device chain
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E writeChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData);
+
+/**
+ * @brief Read from device registers on the device daisy chain
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param rxData Byte array of data to populate with data from device chain
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData);
+
+/**
+ * @brief Write only to pack monitor register
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @param txData Byte array of data to write to the pack monitor
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData);
+
+/**
+ * @brief Read only from pack monitor register
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param rxData Byte array of data to populate with data from the pack monitor
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData);
 
 #endif /* INC_ADBMS_H_ */
-

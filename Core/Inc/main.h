@@ -78,7 +78,7 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 
-extern TelemetryTaskOutputData_S telemetryTaskOutputData;
+extern telemetryTaskData_S telemetryTaskData;
 
 /* USER CODE END Private defines */
 

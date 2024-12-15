@@ -23,8 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
-#include "spi.h"
 #include "printTask.h"
+#include "utils.h"
 
 /* USER CODE END Includes */
 
@@ -51,14 +51,14 @@ TIM_HandleTypeDef htim7;
 UART_HandleTypeDef huart2;
 
 osThreadId telemetryTaskHandle;
-uint32_t telemetryTaskBuffer[ 2048 ];
+uint32_t telemetryTaskBuffer[ 4096 ];
 osStaticThreadDef_t telemetryControlTaskBlock;
 osThreadId printTaskHandle;
 uint32_t printTaskBuffer[ 2048 ];
 osStaticThreadDef_t printTaskControlBlock;
 /* USER CODE BEGIN PV */
 
-TelemetryTaskOutputData_S telemetryTaskOutputData;
+telemetryTaskData_S telemetryTaskData;
 
 volatile bool usDelayActive;
 
@@ -192,7 +192,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of telemetryTask */
-  osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 2048, telemetryTaskBuffer, &telemetryControlTaskBlock);
+  osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 4096, telemetryTaskBuffer, &telemetryControlTaskBlock);
   telemetryTaskHandle = osThreadCreate(osThread(telemetryTask), NULL);
 
   /* definition and creation of printTask */

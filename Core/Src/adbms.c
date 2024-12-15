@@ -2,45 +2,52 @@
 /* ============================= INCLUDES ============================= */
 /* ==================================================================== */
 #include "adbms.h"
-#include "spi.h"
 #include "main.h"
 #include "utils.h"
 
 #include <string.h>
-#include <stdbool.h>
-
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
 
+
+// Size of CRC per transaction packet
 #define CRC_SIZE_BYTES          2
+
+// CRC lookup table size
 #define CRC_LUT_SIZE            256
 
-// These crc values are left shifted 1 from the ADBMS6830 15bit crc
-// This prevents the need for a left shift after every crc calculation
+// Command CRC parameters
 #define CRC_CMD_SEED            0x0020
 #define CRC_CMD_POLY            0x8B32
 #define CRC_CMD_SIZE            16
 
+// Data CRC parameters
 #define CRC_DATA_SEED           0x0010
 #define CRC_DATA_POLY           0x008F
 #define CRC_DATA_SIZE           10
 
+// Command counter parameter
 #define COMMAND_COUNTER_BITS    6
+#define MAX_COMMAND_COUNTER     63
+#define MIN_COMMAND_COUNTER     1
 
+// Size of transaction packets
 #define COMMAND_PACKET_LENGTH    (COMMAND_SIZE_BYTES + CRC_SIZE_BYTES)
 #define REGISTER_PACKET_LENGTH   (REGISTER_SIZE_BYTES + CRC_SIZE_BYTES)
 
+// Number of Read attempts before returning error
 #define TRANSACTION_ATTEMPTS    3
+
+// SPI timeout period
 #define SPI_TIMEOUT_MS          10
 
-#define DUAL_PORT_TRANSACTIONS_BEFORE_RETRY 100
-
+// Time for ADBMS device to wake
 #define TIME_WAKE_US            500
+
+// Time for ADBMS device to transition from idle state
 #define TIME_READY_US           10
-
-
 
 /* ==================================================================== */
 /* ======================= EXTERNAL VARIABLES ========================= */
@@ -48,44 +55,12 @@
 
 extern SPI_HandleTypeDef hspi1;
 
-
-/* ==================================================================== */
-/* ========================= ENUMERATED TYPES ========================= */
-/* ==================================================================== */
-
-typedef enum
-{
-    PORTA = 0,
-    PORTB,
-    NUM_PORTS
-} PORT_E;
-
-typedef enum
-{
-    MULTIPLE_CHAIN_BREAK = 0,
-    SINGLE_CHAIN_BREAK,
-    CHAIN_COMPLETE
-} CHAIN_STATUS_E;
-
-/* ==================================================================== */
-/* ============================== STRUCTS============================== */
-/* ==================================================================== */
-
-typedef struct
-{
-    CHAIN_STATUS_E chainStatus;
-    uint32_t availableDevices[NUM_PORTS];
-    PORT_E originPort;
-    uint32_t numDualPortTransactions;
-    uint32_t localCommandCounter;
-} CHAIN_INFO_S;
-
-
 /* ==================================================================== */
 /* ============================ CRC TABLES ============================ */
 /* ==================================================================== */
 
-uint16_t commandCrcTable[CRC_LUT_SIZE] =
+// CRC lookup table for command PEC
+const uint16_t commandCrcTable[CRC_LUT_SIZE] =
 {
     0x0000, 0x8B32, 0x9D56, 0x1664, 0xB19E, 0x3AAC, 0x2CC8, 0xA7FA, 0xE80E, 0x633C, 0x7558, 0xFE6A, 0x5990, 0xD2A2, 0xC4C6, 0x4FF4,
     0x5B2E, 0xD01C, 0xC678, 0x4D4A, 0xEAB0, 0x6182, 0x77E6, 0xFCD4, 0xB320, 0x3812, 0x2E76, 0xA544, 0x02BE, 0x898C, 0x9FE8, 0x14DA,
@@ -105,7 +80,8 @@ uint16_t commandCrcTable[CRC_LUT_SIZE] =
     0x4EDE, 0xC5EC, 0xD388, 0x58BA, 0xFF40, 0x7472, 0x6216, 0xE924, 0xA6D0, 0x2DE2, 0x3B86, 0xB0B4, 0x174E, 0x9C7C, 0x8A18, 0x012A
 };
 
-uint16_t dataCrcTable[CRC_LUT_SIZE] =
+// CRC lookup table for data PEC
+const uint16_t dataCrcTable[CRC_LUT_SIZE] =
 {
     0x0000, 0x048F, 0x091E, 0x0D91, 0x123C, 0x16B3, 0x1B22, 0x1FAD, 0x24F7, 0x2078, 0x2DE9, 0x2966, 0x36CB, 0x3244, 0x3FD5, 0x3B5A,
     0x49EE, 0x4D61, 0x40F0, 0x447F, 0x5BD2, 0x5F5D, 0x52CC, 0x5643, 0x6D19, 0x6996, 0x6407, 0x6088, 0x7F25, 0x7BAA, 0x763B, 0x72B4,
@@ -125,35 +101,97 @@ uint16_t dataCrcTable[CRC_LUT_SIZE] =
     0xB3E4, 0xB76B, 0xBAFA, 0xBE75, 0xA1D8, 0xA557, 0xA8C6, 0xAC49, 0x9713, 0x939C, 0x9E0D, 0x9A82, 0x852F, 0x81A0, 0x8C31, 0X88BE
 };
 
-
-/* ==================================================================== */
-/* ========================= LOCAL VARIABLES ========================== */
-/* ==================================================================== */
-
-static CHAIN_INFO_S chainInfo;
-
-
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
+/**
+ * @brief Open SPI comm port to initiate isospi transaction
+ * @param port SPI comm port to open
+ */
 static void openPort(PORT_E port);
+
+/**
+ * @brief Close SPI comm port to end isospi transaction
+ * @param port SPI comm port to close
+ */
 static void closePort(PORT_E port);
+
+/**
+ * @brief Activate isospi communication port on slave devices by sending traffic
+ * @param numDevs The number of devices in the communication chain
+ * @param port The port on which to initiate wake up traffic
+ * @param usDelay The number of microseconds to delay between isospi traffic events
+ */
 static void activatePort(uint32_t numDevs, PORT_E port, uint32_t usDelay);
+
+/**
+ * @brief Calculate a command CRC across a given command code
+ * @param packet Byte array of command code
+ * @param numBytes Size of byte array
+ */
 static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes);
+
+/**
+ * @brief Calculate a data CRC across a given data packet
+ * @param packet Byte array of data
+ * @param numBytes Size of byte array
+ * @param commandCounter Data packet command counter to include in CRC calculation
+ */
 static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t commandCounter);
+
+/**
+ * @brief Reset the chain devices and local command counter
+ * @param chainStatus The status of the device daisy chain
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ */
+static void resetCommandCounter(CHAIN_STATUS_E chainStatus, uint32_t* localCommandCounter);
+
+/**
+ * @brief Increment the local command counters according to the message type
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ */
+static void incCommandCounter(COMMAND_TYPE_E commandType, uint32_t* localCommandCounter);
+
+/**
+ * @brief Send a command over isospi
+ * @param command Command code to send
+ * @param port Isospi port on which to issue command
+ * @return Transaction status error code
+ */
 static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port);
-static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, uint8_t *txBuffer, PORT_E port);
-static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uint8_t *rxBuffer, PORT_E port);
-static TRANSACTION_STATUS_E updateChainStatus(uint32_t numDevs);
-static void resetCommandCounter(uint32_t numDevs);
-TRANSACTION_STATUS_E readPackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *rxData);
-TRANSACTION_STATUS_E writePackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *txData);
+
+/**
+ * @brief Write data over isospi - data buffer should include 6 bytes per device
+ * @param command Command code to initiate write transaction
+ * @param numDevs Number of chain devices to write to
+ * @param txBuff Byte array of data to write to device chain
+ * @param port Isospi port on which to issue command
+ * @return Transaction status error code
+ */
+static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, uint8_t *txBuff, PORT_E port);
+
+/**
+ * @brief Read data over isospi - data buffer will be populated with 6 bytes per device
+ * @param command Command code to initiate read transaction
+ * @param numDevs Number of chain devices to read from
+ * @param rxBuff Byte array of data to populate with data from device chain
+ * @param port Isospi port on which to issue command
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ * @param packMonitorIndex The index of the pack monitor device as seen from the current port
+ * @return Transaction status error code
+ */
+static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uint8_t *rxBuff, PORT_E port, uint32_t* localCommandCounter, uint32_t packMonitorIndex);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
 
+/**
+ * @brief Open SPI comm port to initiate isospi transaction
+ * @param port SPI comm port to open
+ */
 static void openPort(PORT_E port)
 {
     if(port == PORTA)
@@ -166,6 +204,10 @@ static void openPort(PORT_E port)
     }
 }
 
+/**
+ * @brief Close SPI comm port to end isospi transaction
+ * @param port SPI comm port to close
+ */
 static void closePort(PORT_E port)
 {
     if(port == PORTA)
@@ -178,38 +220,46 @@ static void closePort(PORT_E port)
     }
 }
 
+/**
+ * @brief Activate isospi communication port on slave devices by sending traffic
+ * @param numDevs The number of devices in the communication chain
+ * @param port The port on which to initiate wake up traffic
+ * @param usDelay The number of microseconds to delay between isospi traffic events
+ */
 static void activatePort(uint32_t numDevs, PORT_E port, uint32_t usDelay)
 {
     if(port == PORTA)
     {
-        for(uint32_t i = 0; i < numDevs+1; i++)
+        for(uint32_t i = 0; i < (numDevs + 1); i++)
         {
             HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_RESET);
             HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
             delayMicroseconds(usDelay);
-            // vTaskDelay(1);
         }
     }
     else if(port == PORTB)
     {
-        for(uint32_t i = 0; i < numDevs+1; i++)
+        for(uint32_t i = 0; i < (numDevs + 1); i++)
         {
             HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_RESET);
             HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_SET);
             delayMicroseconds(usDelay);
-            // vTaskDelay(1);
         }
     }
 }
 
-
+/**
+ * @brief Calculate a command CRC across a given command code
+ * @param packet Byte array of command code
+ * @param numBytes Size of byte array
+ */
 static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes)
 {
     // Begin crc calculation with intial value
     uint16_t crc = CRC_CMD_SEED;
 
     // For each byte of data, use lookup table to efficiently calculate crc
-    for(int32_t i = 0; i < numBytes; i++)
+    for(uint32_t i = 0; i < numBytes; i++)
     {
         // Determine the next look up table index from the current crc and next data byte
         uint8_t index = (uint8_t)((crc >> (CRC_CMD_SIZE - BITS_IN_BYTE)) ^ packet[i]);
@@ -221,13 +271,19 @@ static uint16_t calculateCommandCrc(uint8_t *packet, uint32_t numBytes)
     return crc;
 }
 
+/**
+ * @brief Calculate a data CRC across a given data packet
+ * @param packet Byte array of data
+ * @param numBytes Size of byte array
+ * @param commandCounter Data packet command counter to include in CRC calculation
+ */
 static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t commandCounter)
 {
     // Begin crc calculation with intial value
     uint16_t crc = CRC_DATA_SEED;
 
     // For each byte of data, use lookup table to efficiently calculate crc
-    for(int32_t i = 0; i < numBytes; i++)
+    for(uint32_t i = 0; i < numBytes; i++)
     {
         // Determine the next look up table index from the current crc and next data byte
         uint8_t index = (uint8_t)((crc >> (CRC_DATA_SIZE - BITS_IN_BYTE)) ^ packet[i]);
@@ -251,6 +307,63 @@ static uint16_t calculateDataCrc(uint8_t *packet, uint32_t numBytes, uint8_t com
     return crc;
 }
 
+/**
+ * @brief Reset the chain devices and local command counter
+ * @param chainStatus The status of the device daisy chain
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ */
+static void resetCommandCounter(CHAIN_STATUS_E chainStatus, uint32_t* localCommandCounter)
+{
+    // Reset the local command counters
+    localCommandCounter[CELL_MONITOR] = 0;
+    localCommandCounter[PACK_MONITOR] = 0;
+
+    // Reset the device command counters
+    if(chainStatus == CHAIN_COMPLETE)
+    {
+        sendCommand(RSTCC, PORTA);
+    }
+    else
+    {
+        sendCommand(RSTCC, PORTA);
+        sendCommand(RSTCC, PORTB);
+    }
+}
+
+/**
+ * @brief Increment the local command counters according to the message type
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ */
+static void incCommandCounter(COMMAND_TYPE_E commandType, uint32_t* localCommandCounter)
+{
+    // Increment the Cell Monitor Counter
+    if((commandType == SHARED_COMMAND) || (commandType == CELL_MONITOR_COMMAND))
+    {
+        localCommandCounter[CELL_MONITOR]++;
+        if(localCommandCounter[CELL_MONITOR] > MAX_COMMAND_COUNTER)
+        {
+            localCommandCounter[CELL_MONITOR] = MIN_COMMAND_COUNTER;
+        }
+    }
+
+    // Increment the Pack Monitor Counter
+    if((commandType == SHARED_COMMAND) || (commandType == PACK_MONITOR_COMMAND))
+    {
+        localCommandCounter[PACK_MONITOR]++;
+        if(localCommandCounter[PACK_MONITOR] > MAX_COMMAND_COUNTER)
+        {
+            localCommandCounter[PACK_MONITOR] = MIN_COMMAND_COUNTER;
+        }
+    }
+}
+
+/**
+ * @brief Send a command over isospi
+ * @param command Command code to send
+ * @param port Isospi port on which to issue command
+ * @return Transaction status error code
+ */
 static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port)
 {
     // Size in bytes: Command Word(2) + Command CRC(2)
@@ -271,7 +384,7 @@ static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port)
 
     // SPIify
     openPort(port);
-    if(SPI_TRANSMIT(HAL_SPI_TransmitReceive_IT, &hspi1, SPI_TIMEOUT_MS, txBuffer, rxBuffer, packetLength) != SPI_SUCCESS)
+    if(taskNotifySPI(&hspi1, txBuffer, rxBuffer, packetLength, SPI_TIMEOUT_MS) != SPI_SUCCESS)
     {
         closePort(port);
         return TRANSACTION_SPI_ERROR;
@@ -280,6 +393,14 @@ static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port)
     return TRANSACTION_SUCCESS;
 }
 
+/**
+ * @brief Write data over isospi - data buffer should include 6 bytes per device
+ * @param command Command code to initiate write transaction
+ * @param numDevs Number of chain devices to write to
+ * @param txBuff Byte array of data to write to device chain. Device data should be ordered in the direction of PortA to PortB
+ * @param port Isospi port on which to issue command
+ * @return Transaction status error code
+ */
 static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, uint8_t *txBuff, PORT_E port)
 {
     // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numDevs
@@ -304,14 +425,17 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
         // Calculate the CRC on the register data packet (2 byte CRC on 6 byte packet)
         uint16_t dataCRC = calculateDataCrc(txBuff + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES, 0);
 
+        // Copy the write data from the provided txBuff and the calculated crc into the txBuffer to be sent over SPI
         if(port == PORTB)
         {
+            // The furthest device from portB in the chain receives the first indexed data from txBuff, so data is pasted big endian
             memcpy(txBuffer + COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH), txBuff + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
             txBuffer[COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES] = (uint8_t)(dataCRC >> BITS_IN_BYTE);
             txBuffer[COMMAND_PACKET_LENGTH + (i * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1] = (uint8_t)(dataCRC);
         }
         else
         {
+            // The furthest device from portA in the chain receives the first indexed data from txBuff, so data is pasted little endian
             memcpy(txBuffer + COMMAND_PACKET_LENGTH + ((numDevs - i - 1) * REGISTER_PACKET_LENGTH), txBuff + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
             txBuffer[COMMAND_PACKET_LENGTH + ((numDevs - i - 1) * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES] = (uint8_t)(dataCRC >> BITS_IN_BYTE);
             txBuffer[COMMAND_PACKET_LENGTH + ((numDevs - i - 1) * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1] = (uint8_t)(dataCRC);
@@ -320,7 +444,7 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
 
     // SPIify
     openPort(port);
-    if(SPI_TRANSMIT(HAL_SPI_TransmitReceive_IT, &hspi1, SPI_TIMEOUT_MS, txBuffer, rxBuffer, packetLength) != SPI_SUCCESS)
+    if(taskNotifySPI(&hspi1, txBuffer, rxBuffer, packetLength, SPI_TIMEOUT_MS) != SPI_SUCCESS)
     {
         closePort(port);
         return TRANSACTION_SPI_ERROR;
@@ -329,7 +453,17 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
     return TRANSACTION_SUCCESS;
 }
 
-static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uint8_t *rxBuff, PORT_E port)
+/**
+ * @brief Read data over isospi - data buffer will be populated with 6 bytes per device
+ * @param command Command code to initiate read transaction
+ * @param numDevs Number of chain devices to read from
+ * @param rxBuff Byte array of data to populate with data from device chain
+ * @param port Isospi port on which to issue command
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ * @param packMonitorIndex The index of the pack monitor device as seen from the current port
+ * @return Transaction status error code
+ */
+static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uint8_t *rxBuff, PORT_E port, uint32_t *localCommandCounter, uint32_t packMonitorIndex)
 {
     // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numDevs
     uint32_t packetLength = COMMAND_PACKET_LENGTH + (numDevs * REGISTER_PACKET_LENGTH);
@@ -354,7 +488,7 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
     {
         // SPIify!
         openPort(port);
-        if(SPI_TRANSMIT(HAL_SPI_TransmitReceive_IT, &hspi1, SPI_TIMEOUT_MS, txBuffer, rxBuffer, packetLength) != SPI_SUCCESS)
+        if(taskNotifySPI(&hspi1, txBuffer, rxBuffer, packetLength, SPI_TIMEOUT_MS) != SPI_SUCCESS)
         {
             // On SPI failure, immediately return SPI error
             closePort(port);
@@ -374,52 +508,62 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
             uint16_t pec0 = rxBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES];
             uint16_t pec1 = rxBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1];
             uint16_t registerCRC = ((pec0 << BITS_IN_BYTE) | (pec1)) & 0x03FF;
-            uint8_t bmbCommandCounter = (uint8_t)pec0 >> (BITS_IN_BYTE - COMMAND_COUNTER_BITS);
+            uint8_t deviceCommandCounter = (uint8_t)pec0 >> (BITS_IN_BYTE - COMMAND_COUNTER_BITS);
 
             // If the CRC is incorrect for the data sent, retry the spi transaction
-            if(calculateDataCrc(registerData, REGISTER_SIZE_BYTES, bmbCommandCounter) != registerCRC)
+            if(calculateDataCrc(registerData, REGISTER_SIZE_BYTES, deviceCommandCounter) == registerCRC)
             {
-                // Check if the data and crc is all zeros, if so, return chain break error
-                // uint8_t zero = 0;
-                // if(memcmp(rxBuffer + (COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH)), &zero, REGISTER_PACKET_LENGTH) == 0)
-                // {
-                //     return TRANSACTION_CHAIN_BREAK_ERROR;
-                // }
-
-                returnStatus = TRANSACTION_CHAIN_BREAK_ERROR;
-                break; // Remove break
-            }
-
-            // If there is a command counter error, track the error to be returned later
-            // This allows us to finish checking if there is a chain break or crc error before returning
-            if(bmbCommandCounter != chainInfo.localCommandCounter)
-            {
-                if((bmbCommandCounter != 0) && (returnStatus != TRANSACTION_POR_ERROR))
+                // Determine what device has just been read from, and select the proper local command counter for comparison
+                uint32_t commandCounter;
+                if(j == packMonitorIndex)
                 {
-                    returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
+                    commandCounter = localCommandCounter[PACK_MONITOR];
                 }
                 else
                 {
-                    returnStatus = TRANSACTION_POR_ERROR;
+                    commandCounter = localCommandCounter[CELL_MONITOR];
                 }
-            }
 
-            // Populate rx buffer with local register data
-            // This happens only if there is no crc error, but regardless of if there is a command counter error
-            if(port == PORTA)
-            {
-                memcpy(rxBuff + (j * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
+                // If there is a command counter error, track the error to be returned later
+                // This allows us to finish checking if there is a chain break or crc error before returning
+                if(deviceCommandCounter != commandCounter)
+                {
+                    // A single Power on reset error will take priority over a already present command counter error
+                    if((deviceCommandCounter != 0) && (returnStatus != TRANSACTION_POR_ERROR))
+                    {
+                        returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
+                    }
+                    else
+                    {
+                        returnStatus = TRANSACTION_POR_ERROR;
+                    }
+                }
+
+                // Populate rx buffer with local register data
+                // This happens only if there is no crc error, but regardless of if there is a command counter error
+                if(port == PORTA)
+                {
+                    // The first indexed data from the read is from the closest device to port A , so data is pasted big endian
+                    memcpy(rxBuff + (j * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
+                }
+                else
+                {
+                    // The last indexed data from the read is from the closest device to port B , so data is pasted big endian
+                    memcpy(rxBuff + ((numDevs - j - 1) * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
+                }
             }
             else
             {
-                memcpy(rxBuff + ((numDevs - j - 1) * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
+                // If CRC mismatch, break conversion loop and retry SPI transaction
+                returnStatus = TRANSACTION_CHAIN_BREAK_ERROR;
+                break;
             }
         }
 
         // If the previous for loop was broken with a crc error, do not return, try the transaction again
         if(returnStatus != TRANSACTION_CHAIN_BREAK_ERROR)
         {
-            // If there was no crc and all data is good, return command counter error or success
+            // If there was no crc and all data is good, return a present command counter error or success
             return returnStatus;
         }
     }
@@ -428,28 +572,76 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
     return TRANSACTION_CHAIN_BREAK_ERROR;
 }
 
-static TRANSACTION_STATUS_E updateChainStatus(uint32_t numDevs)
+/* ==================================================================== */
+/* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
+/* ==================================================================== */
+
+/**
+ * @brief Wake up the device daisy chain from sleep
+ * @param chainInfo Chain data struct
+ */
+void wakeChain(CHAIN_INFO_S *chainInfo)
 {
-    // Attempt to completely wake up the chain
-    // activatePort(numDevs, PORTA, TIME_WAKE_US);
-    // activatePort(numDevs, PORTB, TIME_WAKE_US);
+    if(chainInfo->chainStatus == CHAIN_COMPLETE)
+    {
+        activatePort(chainInfo->numDevs, chainInfo->currentPort, TIME_WAKE_US);
+    }
+    else
+    {
+        activatePort(chainInfo->availableDevices[PORTA], PORTA, TIME_WAKE_US);
+        activatePort(chainInfo->availableDevices[PORTB], PORTB, TIME_WAKE_US);
+    }
+}
 
+/**
+ * @brief Wake up the device daisy chain from idle
+ * @param chainInfo Chain data struct
+ */
+void readyChain(CHAIN_INFO_S *chainInfo)
+{
+    if(chainInfo->chainStatus == CHAIN_COMPLETE)
+    {
+        activatePort(chainInfo->numDevs, chainInfo->currentPort, TIME_READY_US);
+    }
+    else
+    {
+        activatePort(chainInfo->availableDevices[PORTA], PORTA, TIME_READY_US);
+        activatePort(chainInfo->availableDevices[PORTB], PORTB, TIME_READY_US);
+    }
+}
+
+/**
+ * @brief Renumerate the device daisy chain to determine chain status
+ * @param chainInfo Chain data struct
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E updateChainStatus(CHAIN_INFO_S *chainInfo)
+{
     // Create dummy buffer for read command
-    uint8_t rxBuff[numDevs * REGISTER_SIZE_BYTES];
+    uint8_t rxBuff[chainInfo->numDevs * REGISTER_SIZE_BYTES];
 
+    // Create a variable to track any errors until the return statement is reached
     TRANSACTION_STATUS_E returnStatus = TRANSACTION_SUCCESS;
 
     // Attempt to read from an increasing number of bmbs from each port
     // Set availableBmbs to the number of bmbs reachable
-    for(int32_t port = 0; port < NUM_PORTS; port++)
+    for(uint32_t port = 0; port < NUM_PORTS; port++)
     {
-        chainInfo.availableDevices[port] = numDevs;
-        for(int32_t devices = 1; devices <= numDevs; devices++)
+        // Start by assuming all devices can be reached
+        chainInfo->availableDevices[port] = chainInfo->numDevs;
+
+        // Starting with 1 device, increase the message size to the total number of device in the chain
+        for(uint32_t devices = 1; devices <= chainInfo->numDevs; devices++)
         {
-            TRANSACTION_STATUS_E readStatus = readRegister(RDSID, devices, rxBuff, port);
+            // Perform a dummy read command on the given port and for the given number of devices
+            uint32_t packMonitorIndex = ((uint32_t)(port) ^ (uint32_t)(chainInfo->packMonitorPort)) * (chainInfo->numDevs - 1);
+            TRANSACTION_STATUS_E readStatus = readRegister(RDSID, devices, rxBuff, port, chainInfo->localCommandCounter, packMonitorIndex);
+
+            // Handle read error
             if(readStatus == TRANSACTION_CHAIN_BREAK_ERROR)
             {
-                chainInfo.availableDevices[port] = (devices - 1);
+                // On a chain break, set the number of available devices to 1 less than the failed transaction size
+                chainInfo->availableDevices[port] = (devices - 1);
                 break;
             }
             else if(readStatus == TRANSACTION_SPI_ERROR)
@@ -459,407 +651,341 @@ static TRANSACTION_STATUS_E updateChainStatus(uint32_t numDevs)
             }
             else if(readStatus == TRANSACTION_POR_ERROR)
             {
+                // On a power on reset error, track error, and continue loop until available devices can be determined
                 returnStatus = TRANSACTION_POR_ERROR;
             }
             else if((readStatus == TRANSACTION_COMMAND_COUNTER_ERROR) && (returnStatus != TRANSACTION_POR_ERROR))
             {
+                // On a command counter error, track error if no POR error is alread present, and continue loop until available devices can be determined
                 returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
             }
         }
     }
 
-
     // Determine the COMMS status from the result of portA and portB enumeration
-    if((chainInfo.availableDevices[PORTA] == numDevs) && (chainInfo.availableDevices[PORTB] == numDevs))
+    if((chainInfo->availableDevices[PORTA] == chainInfo->numDevs) && (chainInfo->availableDevices[PORTB] == chainInfo->numDevs))
     {
         // If there are no chain breaks detected, bidirectional comms are enabled
-        chainInfo.chainStatus = CHAIN_COMPLETE;
+        chainInfo->chainStatus = CHAIN_COMPLETE;
     }
-    else if((chainInfo.availableDevices[PORTA] + chainInfo.availableDevices[PORTB]) == numDevs)
+    else if((chainInfo->availableDevices[PORTA] + chainInfo->availableDevices[PORTB]) == chainInfo->numDevs)
     {
         // If only a single chain break is detected, unidirectional comms are enabled
-        chainInfo.chainStatus = SINGLE_CHAIN_BREAK;
+        chainInfo->chainStatus = SINGLE_CHAIN_BREAK;
     }
     else
     {
         // If multiple chain breaks are detected, LOST_COMMS is set
-        chainInfo.chainStatus = MULTIPLE_CHAIN_BREAK;
+        chainInfo->chainStatus = MULTIPLE_CHAIN_BREAK;
     }
 
+    // Return any tracked POR or command counter errors, or success
     return returnStatus;
 }
 
-static void resetCommandCounter(uint32_t numDevs)
+/**
+ * @brief Send a command on the device daisy chain
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E commandChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType)
 {
-    sendCommand(RSTCC, PORTA);
-    sendCommand(RSTCC, PORTB);
-    chainInfo.localCommandCounter = 0;
-}
-
-/* ==================================================================== */
-/* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
-/* ==================================================================== */
-
-void wakeChain(uint32_t numDevs)
-{
-    if(chainInfo.chainStatus == CHAIN_COMPLETE)
+    // Check the current assumed chain status
+    if(chainInfo->chainStatus == CHAIN_COMPLETE)
     {
-        activatePort(numDevs, chainInfo.originPort, TIME_WAKE_US);
+        // When the chain is complete, send the command using the current chain port
+        // sendCommand will return either success or a spi error
+        TRANSACTION_STATUS_E status = sendCommand(command, chainInfo->currentPort);
+
+        // Increment command counter
+        incCommandCounter(commandType, chainInfo->localCommandCounter);
+
+        // Return transaction status
+        return status;
     }
     else
     {
-        activatePort(chainInfo.availableDevices[PORTA], PORTA, TIME_WAKE_US);
-        activatePort(chainInfo.availableDevices[PORTB], PORTB, TIME_WAKE_US);
+        // If there are any chain breaks, use both ports to reach as many devices as possible
+        TRANSACTION_STATUS_E portAStatus = TRANSACTION_SUCCESS;
+        TRANSACTION_STATUS_E portBStatus = TRANSACTION_SUCCESS;
+
+        // Only send a command if there are devices available on the port
+        if(chainInfo->availableDevices[PORTA] > 0)
+        {
+            portAStatus = sendCommand(command, PORTA);
+        }
+
+        // Only send a command if there are devices available on the port
+        if(chainInfo->availableDevices[PORTB] > 0)
+        {
+            portBStatus = sendCommand(command, PORTB);
+        }
+
+        // Increment command counter
+        incCommandCounter(commandType, chainInfo->localCommandCounter);
+
+        // The attempted transaction worked only if both ports return success
+        if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
+        {
+            if(chainInfo->chainStatus == SINGLE_CHAIN_BREAK)
+            {
+                // For a single chain break, the transaction can be marked as successful, because all devices were reached
+                return TRANSACTION_SUCCESS;
+            }
+            else
+            {
+                // If there is a multi-chain break, not every device is successfully reached, return chain break error
+                return TRANSACTION_CHAIN_BREAK_ERROR;
+            }
+        }
+        else
+        {
+            // If either port's command fails, return SPI error
+            return TRANSACTION_SPI_ERROR;
+        }
     }
 }
 
-void readyChain(uint32_t numDevs)
+/**
+ * @brief Write to device registers on the device daisy chain
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @param txData Byte array of data to write to device chain
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E writeChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData)
 {
-    if(chainInfo.chainStatus == CHAIN_COMPLETE)
+    // Check the current assumed chain status
+    if(chainInfo->chainStatus == CHAIN_COMPLETE)
     {
-        activatePort(numDevs, chainInfo.originPort, TIME_READY_US);
+        // When the chain is complete, send the command using the current chain port
+        // writeRegister will return either success or a spi error
+        TRANSACTION_STATUS_E status = writeRegister(command, chainInfo->numDevs, txData, chainInfo->currentPort);
+
+        // Flip the chain port for the next chain transaction
+        chainInfo->currentPort = !chainInfo->currentPort;
+
+        // Increment command counter
+        incCommandCounter(commandType, chainInfo->localCommandCounter);
+
+        // Return transaction status
+        return status;
     }
     else
     {
-        activatePort(chainInfo.availableDevices[PORTA], PORTA, TIME_READY_US);
-        activatePort(chainInfo.availableDevices[PORTB], PORTB, TIME_READY_US);
-    }
-}
+        // If there are any chain breaks, use both ports to reach as many devices as possible
+        TRANSACTION_STATUS_E portAStatus = TRANSACTION_SUCCESS;
+        TRANSACTION_STATUS_E portBStatus = TRANSACTION_SUCCESS;
 
-TRANSACTION_STATUS_E commandChain(uint16_t command, uint32_t numDevs)
-{
-    for(int32_t i = 0; i < 2; i++)
-    {
-        if(chainInfo.chainStatus == CHAIN_COMPLETE)
+        // Only send a command if there are devices available on the port
+        if(chainInfo->availableDevices[PORTA] > 0)
         {
-            // When the chain is complete, send the command using the current origin port
-            // sendCommand will return either success or a spi error
-            TRANSACTION_STATUS_E status = sendCommand(command, chainInfo.originPort);
-
-            // Increment command counter
-            chainInfo.localCommandCounter++;
-            if(chainInfo.localCommandCounter > 63)
-            {
-                chainInfo.localCommandCounter = 1;
-            }
-            return status;
+            portAStatus = writeRegister(command, chainInfo->availableDevices[PORTA], txData, PORTA);
         }
-        else
+
+        // Only send a command if there are devices available on the port
+        if(chainInfo->availableDevices[PORTB] > 0)
         {
-            // If there are any chain breaks, use both ports to reach as many bmbs as possible
-            TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (sendCommand(command, PORTA)) : (TRANSACTION_SUCCESS);
-            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (sendCommand(command, PORTB)) : (TRANSACTION_SUCCESS);
+            // The txData pointer is shifted by the number of devices not available on the port, this allows data to populate in the appropriate index of txData
+            portBStatus = writeRegister(command, chainInfo->availableDevices[PORTB], txData + REGISTER_SIZE_BYTES * (chainInfo->numDevs - chainInfo->availableDevices[PORTB]), PORTB);
+        }
 
-            // Increment command counter
-            chainInfo.localCommandCounter++;
-            if(chainInfo.localCommandCounter > 63)
-            {
-                chainInfo.localCommandCounter = 1;
-            }
+        // Increment command counter
+        incCommandCounter(commandType, chainInfo->localCommandCounter);
 
-            // The attempted transaction worked only if both ports return success
-            if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
+        // The attempted transaction worked only if both ports return success
+        if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
+        {
+            if(chainInfo->chainStatus == SINGLE_CHAIN_BREAK)
             {
                 // For a single chain break, the transaction can be marked as successful, because all devices were reached
-                if(chainInfo.chainStatus == SINGLE_CHAIN_BREAK)
-                {
-                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away
-                    chainInfo.numDualPortTransactions++;
-                    if(chainInfo.numDualPortTransactions > DUAL_PORT_TRANSACTIONS_BEFORE_RETRY)
-                    {
-                        chainInfo.numDualPortTransactions = 0;
-                        TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numDevs);
-                        if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
-                        {
-                            return TRANSACTION_SPI_ERROR;
-                        }
-                        else if(chainUpdateStatus != TRANSACTION_SUCCESS)
-                        {
-                            resetCommandCounter(numDevs);
-                            return chainUpdateStatus;
-                        }
-                    }
-
-                    // If every bmb is successfully reached, return success
-                    return TRANSACTION_SUCCESS;
-                }
-                else
-                {
-                    // If there is a multi-chain break, not every bmb is successfully reached, so attempt to update the chain status once and return error
-                    TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numDevs);
-                    if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
-                    {
-                        return TRANSACTION_SPI_ERROR;
-                    }
-                    else if(chainUpdateStatus != TRANSACTION_SUCCESS)
-                    {
-                        resetCommandCounter(numDevs);
-                        return chainUpdateStatus;
-                    }
-
-                    if(chainInfo.chainStatus != MULTIPLE_CHAIN_BREAK)
-                    {
-                        continue;
-                    }
-                    return TRANSACTION_CHAIN_BREAK_ERROR;
-                }
+                return TRANSACTION_SUCCESS;
             }
             else
             {
-                // If either port's command fails, return SPI error
-                return TRANSACTION_SPI_ERROR;
+                // If there is a multi-chain break, not every device is successfully reached, return chain break error
+                return TRANSACTION_CHAIN_BREAK_ERROR;
             }
-        }
-    }
-
-    // This should only be reached if the chain status does not get updated properly the first time
-    return TRANSACTION_CHAIN_BREAK_ERROR;
-}
-
-TRANSACTION_STATUS_E writeChain(uint16_t command, uint32_t numDevs, uint8_t *txData)
-{
-    for(int32_t i = 0; i < 2; i++)
-    {
-        if(chainInfo.chainStatus == CHAIN_COMPLETE)
-        {
-            // When the chain is complete, send the command using the current origin port
-            // sendCommand will return either success or a spi error
-            TRANSACTION_STATUS_E status = writeRegister(command, numDevs, txData, chainInfo.originPort);
-
-            // Flip origin port
-            chainInfo.originPort = !chainInfo.originPort;
-
-            // Increment command counter
-            chainInfo.localCommandCounter++;
-            if(chainInfo.localCommandCounter > 63)
-            {
-                chainInfo.localCommandCounter = 1;
-            }
-
-            return status;
         }
         else
         {
-            // If there are any chain breaks, use both ports to reach as many bmbs as possible
-            TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (writeRegister(command, chainInfo.availableDevices[PORTA], txData, PORTA)) : (TRANSACTION_SUCCESS);
-            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (writeRegister(command, chainInfo.availableDevices[PORTB], txData + REGISTER_SIZE_BYTES * (numDevs - chainInfo.availableDevices[PORTB]), PORTB)) : (TRANSACTION_SUCCESS);
-
-            // Increment command counter
-            chainInfo.localCommandCounter++;
-            if(chainInfo.localCommandCounter > 63)
-            {
-                chainInfo.localCommandCounter = 1;
-            }
-
-            // The attempted transaction worked only if both ports return success
-            if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
-            {
-                // For a single chain break, the transaction can be marked as successful, because all devices were reached
-                if(chainInfo.chainStatus == SINGLE_CHAIN_BREAK)
-                {
-                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away
-                    chainInfo.numDualPortTransactions++;
-                    if(chainInfo.numDualPortTransactions > DUAL_PORT_TRANSACTIONS_BEFORE_RETRY)
-                    {
-                        chainInfo.numDualPortTransactions = 0;
-                        TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numDevs);
-                        if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
-                        {
-                            return TRANSACTION_SPI_ERROR;
-                        }
-                        else if(chainUpdateStatus != TRANSACTION_SUCCESS)
-                        {
-                            resetCommandCounter(numDevs);
-                            return chainUpdateStatus;
-                        }
-                    }
-
-                    // If every bmb is successfully reached, return success
-                    return TRANSACTION_SUCCESS;
-                }
-                else
-                {
-                    // If there is a multi-chain break, not every bmb is successfully reached, so attempt to update the chain status once and return error
-                    TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numDevs);
-                    if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
-                    {
-                        return TRANSACTION_SPI_ERROR;
-                    }
-                    else if(chainUpdateStatus != TRANSACTION_SUCCESS)
-                    {
-                        resetCommandCounter(numDevs);
-                        return chainUpdateStatus;
-                    }
-
-                    if(chainInfo.chainStatus != MULTIPLE_CHAIN_BREAK)
-                    {
-                        continue;
-                    }
-                    return TRANSACTION_CHAIN_BREAK_ERROR;
-                }
-            }
-            else
-            {
-                // If either port's command fails, return SPI error
-                return TRANSACTION_SPI_ERROR;
-            }
+            // If either port's writeRegister fails, return SPI error
+            return TRANSACTION_SPI_ERROR;
         }
     }
-
-    // This should only be reached if the chain status does not get updated properly the first time
-    return TRANSACTION_CHAIN_BREAK_ERROR;
 }
 
-TRANSACTION_STATUS_E readChain(uint16_t command, uint32_t numDevs, uint8_t *rxData)
+/**
+ * @brief Read from device registers on the device daisy chain
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param rxData Byte array of data to populate with data from device chain
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData)
 {
     // This for loop allows the chain to attempt to correct itself once, but will end the fuction if it fails to update properly
     for(int32_t i = 0; i < 2; i++)
     {
-        if(chainInfo.chainStatus == CHAIN_COMPLETE)
+        // Check the current assumed chain status
+        if(chainInfo->chainStatus == CHAIN_COMPLETE)
         {
-            // When the chain is complete, send the command using the current origin port
-            TRANSACTION_STATUS_E cmdStatus = readRegister(command, numDevs, rxData, chainInfo.originPort);
+            // Calculate the index of the pack monitor as seen from the current isospi port
+            uint32_t packMonitorIndex = ((uint32_t)(chainInfo->currentPort) ^ (uint32_t)(chainInfo->packMonitorPort)) * (chainInfo->numDevs - 1);
+
+            // When the chain is complete, send the command using the current chain port
+            TRANSACTION_STATUS_E cmdStatus = readRegister(command, chainInfo->numDevs, rxData, chainInfo->currentPort, chainInfo->localCommandCounter, packMonitorIndex);
 
             // On success, return success
             // On SPI error, power on reset error, or command counter error, return the error code
             // On a crc error, drop to bottom of the for loop and try to update the chain status
             if(cmdStatus == TRANSACTION_SUCCESS)
             {
-                // Flip origin port
-                chainInfo.originPort = !chainInfo.originPort;
+                // Flip the chain port for the next chain transaction
+                chainInfo->currentPort = !chainInfo->currentPort;
 
                 // On a transaction success, end and return success
                 return TRANSACTION_SUCCESS;
             }
             else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR || cmdStatus == TRANSACTION_POR_ERROR)
             {
-                resetCommandCounter(numDevs);
+                // On a command counter error or power on reset error, reset the command counter and return error
+                resetCommandCounter(chainInfo->chainStatus, chainInfo->localCommandCounter);
                 return cmdStatus;
             }
             else if(cmdStatus == TRANSACTION_SPI_ERROR)
             {
+                // On SPI error, return error
                 return TRANSACTION_SPI_ERROR;
             }
+            // On chain break error, drop to bottom of loop and perform an update chain status
         }
         else
         {
             // If there are any chain breaks, use both ports to reach as many bmbs as possible
-            TRANSACTION_STATUS_E portAStatus = (chainInfo.availableDevices[PORTA] > 0) ? (readRegister(command, chainInfo.availableDevices[PORTA], rxData, PORTA)) : (TRANSACTION_SUCCESS);
-            TRANSACTION_STATUS_E portBStatus = (chainInfo.availableDevices[PORTB] > 0) ? (readRegister(command, chainInfo.availableDevices[PORTB], rxData + REGISTER_SIZE_BYTES * (numDevs - chainInfo.availableDevices[PORTB]), PORTB)) : (TRANSACTION_SUCCESS);
+            TRANSACTION_STATUS_E portAStatus = TRANSACTION_SUCCESS;
+            TRANSACTION_STATUS_E portBStatus = TRANSACTION_SUCCESS;
 
+            // Only send a command if there are devices available on the port
+            if(chainInfo->availableDevices[PORTA] > 0)
+            {
+                // Calculate the index of the pack monitor as seen from the current isospi port
+                uint32_t packMonitorIndexA = (uint32_t)(chainInfo->packMonitorPort) * (chainInfo->numDevs - 1);
+
+                // Read from as many devices as are available
+                portAStatus = readRegister(command, chainInfo->availableDevices[PORTA], rxData, PORTA, chainInfo->localCommandCounter, packMonitorIndexA);
+            }
+
+            // Only send a command if there are devices available on the port
+            if(chainInfo->availableDevices[PORTB] > 0)
+            {
+                // Calculate the index of the pack monitor as seen from the current isospi port
+                uint32_t packMonitorIndexB = ((uint32_t)(!chainInfo->packMonitorPort)) * (chainInfo->numDevs - 1);
+
+                // The rxData pointer is shifted by the number of devices not available on the port, this allows data to be be sent to the appropiate device index
+                readRegister(command, chainInfo->availableDevices[PORTB], rxData + REGISTER_SIZE_BYTES * (chainInfo->numDevs - chainInfo->availableDevices[PORTB]), PORTB, chainInfo->localCommandCounter, packMonitorIndexB);
+            }
+
+            // Check the status of both transactions
             if((portAStatus == TRANSACTION_SUCCESS) && (portBStatus == TRANSACTION_SUCCESS))
             {
-                // For a single chain break, the transaction can be marked as successful, because all devices were reached
-                if(chainInfo.chainStatus == SINGLE_CHAIN_BREAK)
+                // On success, check chain status
+                if(chainInfo->chainStatus == SINGLE_CHAIN_BREAK)
                 {
-                    // After a defined number of single chain break mode transactions, we check if the chain break has gone away
-                    chainInfo.numDualPortTransactions++;
-                    if(chainInfo.numDualPortTransactions > DUAL_PORT_TRANSACTIONS_BEFORE_RETRY)
-                    {
-                        chainInfo.numDualPortTransactions = 0;
-                        TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numDevs);
-                        if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
-                        {
-                            return TRANSACTION_SPI_ERROR;
-                        }
-                        else if(chainUpdateStatus != TRANSACTION_SUCCESS)
-                        {
-                            resetCommandCounter(numDevs);
-                            return chainUpdateStatus;
-                        }
-                    }
-
-                    // If every bmb is successfully reached, return success
+                    // For a single chain break, the transaction can be marked as successful, because all devices were reached
                     return TRANSACTION_SUCCESS;
                 }
                 else
                 {
-                    // If there is a multi-chain break, not every bmb is successfully reached, so attempt to update the chain status once and return error
-                    TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numDevs);
-                    if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
-                    {
-                        return TRANSACTION_SPI_ERROR;
-                    }
-                    else if(chainUpdateStatus != TRANSACTION_SUCCESS)
-                    {
-                        resetCommandCounter(numDevs);
-                        return chainUpdateStatus;
-                    }
-
-                    if(chainInfo.chainStatus != MULTIPLE_CHAIN_BREAK)
-                    {
-                        continue;
-                    }
+                    // For a multi chain break, all devices were not reached, return chain break error
                     return TRANSACTION_CHAIN_BREAK_ERROR;
                 }
             }
             else if((portAStatus == TRANSACTION_SPI_ERROR) || (portBStatus == TRANSACTION_SPI_ERROR))
             {
+                // On SPI error, return error
                 return TRANSACTION_SPI_ERROR;
             }
             else if((portAStatus == TRANSACTION_POR_ERROR) || (portBStatus == TRANSACTION_POR_ERROR))
             {
-                resetCommandCounter(numDevs);
+                // On a power on reset error, reset the command counter and return error
+                resetCommandCounter(chainInfo->chainStatus, chainInfo->localCommandCounter);
                 return TRANSACTION_POR_ERROR;
             }
             else if((portAStatus == TRANSACTION_COMMAND_COUNTER_ERROR) || (portBStatus == TRANSACTION_COMMAND_COUNTER_ERROR))
             {
-                resetCommandCounter(numDevs);
+                // On a command counter error, reset the command counter and return error
+                resetCommandCounter(chainInfo->chainStatus, chainInfo->localCommandCounter);
                 return TRANSACTION_COMMAND_COUNTER_ERROR;
             }
+            // On chain break error, drop to bottom of loop and perform an update chain status
         }
 
         // On a chain break error, attempt to update the chain status
-        TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(numDevs);
+        // This function cannot return chain break error
+        TRANSACTION_STATUS_E chainUpdateStatus = updateChainStatus(chainInfo);
+
+        // Check chain update transaction status
         if(chainUpdateStatus == TRANSACTION_SPI_ERROR)
         {
+            // On SPI error, return error
             return TRANSACTION_SPI_ERROR;
         }
         else if(chainUpdateStatus != TRANSACTION_SUCCESS)
         {
-            resetCommandCounter(numDevs);
+            // On a command counter error or power on reset error, reset the command counter and return error
+            resetCommandCounter(chainInfo->chainStatus, chainInfo->localCommandCounter);
             return chainUpdateStatus;
         }
 
-        // After updating the chain status, we try one more time to communicate
+        // After updating the chain status, try one more time to communicate
     }
 
     // This should only be reached if the chain status does not get updated properly the first time
     return TRANSACTION_CHAIN_BREAK_ERROR;
 }
 
+/**
+ * @brief Write only to pack monitor register
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param commandType The type of command to determine which devices will recognize the command
+ * @param txData Byte array of data to write to the pack monitor
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData)
+{
+    // Perform a write register on the pack monitor port and for only 1 device
+    TRANSACTION_STATUS_E status = writeRegister(command, 1, txData, chainInfo->packMonitorPort);
 
-TRANSACTION_STATUS_E readPackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *rxData){
-    //it will read from only that port and return only the information of the number of devices
+    // Increment command counter
+    incCommandCounter(commandType, chainInfo->localCommandCounter);
 
-
-    TRANSACTION_STATUS_E cmdStatus = readRegister(command, 1, rxData, port);
-    if(cmdStatus == TRANSACTION_SUCCESS){
-        return TRANSACTION_SUCCESS;
-    }
-    else if(cmdStatus == TRANSACTION_SPI_ERROR){
-        return TRANSACTION_SPI_ERROR;
-    }
-    else if(cmdStatus == TRANSACTION_COMMAND_COUNTER_ERROR){
-        resetCommandCounter(1);
-        return TRANSACTION_COMMAND_COUNTER_ERROR;
-    }
-//if cmmd or por, reset
-
-//return cmd status 
-    
+    // Return transaction status
+    return status;
 }
 
+/**
+ * @brief Read only from pack monitor register
+ * @param command Command code to send
+ * @param chainInfo Chain data struct
+ * @param rxData Byte array of data to populate with data from the pack monitor
+ * @return Transaction status error code
+ */
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData)
+{
+    // Perform a read register on the pack monitor port and for only 1 device
+    TRANSACTION_STATUS_E status = readRegister(command, 1, rxData, chainInfo->packMonitorPort, chainInfo->localCommandCounter, 0);
 
-TRANSACTION_STATUS_E writePackMonitor(uint16_t command, uint32_t numBmbs, PORT_E port, uint8_t *txData){
+    // If a command counter or power on reset error was returned, reset the command counter
+    if(status == TRANSACTION_COMMAND_COUNTER_ERROR || status == TRANSACTION_POR_ERROR)
+    {
+        resetCommandCounter(chainInfo->chainStatus, chainInfo->localCommandCounter);
+    }
 
-        TRANSACTION_STATUS_E status = writeRegister(command, numBmbs, txData, port);
-        // Increment command counter
-        chainInfo.localCommandCounter++;
-        if(chainInfo.localCommandCounter > 63)
-        {
-            chainInfo.localCommandCounter = 1;
-        }
-
-        return status;
+    // Return transaction status
+    return status;
 }
