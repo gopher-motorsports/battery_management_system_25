@@ -82,11 +82,11 @@ static void printCellTemps(Bmb_S* bmb)
             {
                 if((bmb[j].cellTemp[i] < 0.0f) || bmb[j].cellTemp[i] >= 100.0f)
                 {
-                    printf("   %3.1f    |", (double)bmb[j].cellTemp[i]);
+                    printf("   %3.1f   |", (double)bmb[j].cellTemp[i]);
                 }
                 else
                 {
-                    printf("    %3.1f    |", (double)bmb[j].cellTemp[i]);
+                    printf("    %3.1f   |", (double)bmb[j].cellTemp[i]);
                 }
             }
             else
@@ -103,11 +103,11 @@ static void printCellTemps(Bmb_S* bmb)
         {
             if((bmb[j].boardTemp < 0.0f) || bmb[j].boardTemp >= 100.0f)
             {
-                printf("   %3.1f    |", (double)bmb[j].boardTemp);
+                printf("   %3.1f   |", (double)bmb[j].boardTemp);
             }
             else
             {
-                printf("    %3.1f    |", (double)bmb[j].boardTemp);
+                printf("    %3.1f   |", (double)bmb[j].boardTemp);
             }
             // printf("  %04X", gBms.bmb[j].cellVoltage[i]);
         }
