@@ -6,6 +6,7 @@
 /* ==================================================================== */
 
 #include "adbms.h"
+#include "soc.h"
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -54,6 +55,17 @@ typedef struct
     float cellTemp[NUM_CELLS_PER_BMB];
     SENSOR_STATUS_E cellTempStatus[NUM_CELLS_PER_BMB];
 
+    float maxCellVoltage;
+    float minCellVoltage;
+    float sumCellVoltage;
+    float avgCellVoltage;
+    uint32_t numBadCellVoltage;
+
+    float maxCellTemp;
+    float minCellTemp;
+    float avgCellTemp;
+    uint32_t numBadCellTemp;
+
     float boardTemp;
     SENSOR_STATUS_E boardTempStatus;
 
@@ -65,6 +77,8 @@ typedef struct
 
     CHAIN_INFO_S chainInfo;
 
+    Soc_S socData;
+
     float IADC1;
     float IADC2;
 
@@ -73,6 +87,20 @@ typedef struct
 
     uint8_t testData[NUM_DEVICES_IN_ACCUMULATOR][REGISTER_SIZE_BYTES];
     TRANSACTION_STATUS_E testStatus[NUM_DEVICES_IN_ACCUMULATOR];
+
+    float packVoltage;
+
+    float maxCellVoltage;
+    float minCellVoltage;
+    float avgCellVoltage;
+
+    float maxCellTemp;
+    float minCellTemp;
+    float avgCellTemp;
+
+    float maxBoardTemp;
+    float minBoardTemp;
+    float avgBoardTemp;
 
 } telemetryTaskData_S;
 

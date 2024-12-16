@@ -8,6 +8,8 @@
 #include "utils.h"
 #include "debug.h"
 #include "lookupTable.h"
+#include "packData.h"
+#include "cellData.h"
 #include <string.h>
 #include <stdbool.h>
 
@@ -18,28 +20,6 @@
 /* ==================================================================== */
 
 #define NUM_COMMAND_BLOCK_RETRYS            3
-
-#define CELLS_PER_REG       3
-#define CELL_REG_SIZE       (REGISTER_SIZE_BYTES / CELLS_PER_REG)
-
-#define VBATT_DATA_PER_REG  3
-#define VBATT_DATA_SIZE     (REGISTER_SIZE_BYTES / VBATT_DATA_PER_REG)
-
-#define ENERGY_DATA_PER_REG 2
-#define ENERGY_DATA_SIZE    (REGISTER_SIZE_BYTES / ENERGY_DATA_PER_REG)
-
-#define VADC_GAIN           0.00015f
-#define VADC_OFFSET         1.5f
-
-#define IADC_GAIN           0.000001f
-#define VBADC1_GAIN         0.0001f
-#define VBADC2_GAIN         0.000085f
-
-#define NUM_CELLV_REGISTERS 6
-#define NUM_AUXV_REGISTERS  3
-
-// The number of values contained in the temperature lookup table
-#define TEMP_LUT_SIZE 33
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -89,24 +69,6 @@ uint16_t readAuxReg[NUM_AUXV_REGISTERS] =
     RDAUXC
 };
 
-const float temperatureArray[TEMP_LUT_SIZE] =
-{
-    120, 115, 110, 105, 100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0, -5, -10, -15, -20, -25, -30, -35, -40
-};
-
-const float cellTempVoltageArray[TEMP_LUT_SIZE] =
-{
-    0.2919345638, 0.324518624, 0.3612309495, 0.402585263, 0.4491372839, 0.5014774689, 0.5602182763, 0.6259742709, 0.699333326, 0.7808173945, 0.8708320017, 0.969604948, 1.077116849, 1.193029083, 1.316618141, 1.44672857, 1.581758437, 1.71969016, 1.85817452, 1.994666667, 2.126601617, 2.25158619, 2.367578393, 2.473026369, 2.566947369, 2.648940056, 2.719136612, 2.778110865, 2.826762844, 2.866199204, 2.897624362, 2.922251328, 2.941235685
-};
-
-const float boardTempVoltageArray[TEMP_LUT_SIZE] =
-{
-    0.1741318359, 0.193533737, 0.2155192602, 0.2404628241, 0.2687907644, 0.3009857595, 0.3375901116, 0.3792069573, 0.4264981201, 0.480176881, 0.5409934732, 0.6097106855, 0.6870667304, 0.7737227417, 0.870193244, 0.976760075, 1.093373849, 1.219552143, 1.354289544, 1.496, 1.642514054, 1.791149899, 1.938865924, 2.082484747, 2.218959086, 2.345635446, 2.460468742, 2.562151894, 2.650145243, 2.724613713, 2.786297043, 2.836345972, 2.87615517
-};
-
-LookupTable_S cellTempTable =  { .length = TEMP_LUT_SIZE, .x = cellTempVoltageArray, .y = temperatureArray};
-LookupTable_S boardTempTable = { .length = TEMP_LUT_SIZE, .x = boardTempVoltageArray, .y = temperatureArray};
-
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
@@ -122,6 +84,9 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData);
 // static TRANSACTION_STATUS_E runSPinDiagnostics(telemetryTaskData_S *taskData);
+
+static void updateBmbStatistics(Bmb_S *bmb);
+static void updatePackStatistics(telemetryTaskData_S *taskData);
 
 /* ==================================================================== */
 /* ============================== MACROS ============================== */
@@ -456,6 +421,177 @@ static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
 
 // static TRANSACTION_STATUS_E runSPinDiagnostics(telemetryTaskData_S *taskData);
 
+static void updateBmbStatistics(Bmb_S *bmb)
+{
+	for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+	{
+		Bmb_S* pBmb = &bmb[i];
+		float maxCellVoltage = MIN_CELLV_SENSOR_VALUE;
+		float minCellVoltage = MAX_CELLV_SENSOR_VALUE;
+		float sumVoltage = 0.0f;
+		uint32_t numGoodCellVoltage = 0;
+
+		float maxCellTemp = MIN_TEMP_SENSOR_VALUE_C;
+		float minCellTemp = MAX_TEMP_SENSOR_VALUE_C;
+		float sumCellTemp = 0.0f;
+		uint32_t numGoodCellTemp = 0;
+
+		// Aggregate Cell voltage and temperature data
+		for(uint32_t j = 0; j < NUM_CELLS_PER_BMB; j++)
+		{
+			// Only update stats if sense status is good
+			if(pBmb->cellVoltageStatus[j] == GOOD)
+			{
+				float cellV = pBmb->cellVoltage[j];
+
+				if(cellV > maxCellVoltage)
+				{
+					maxCellVoltage = cellV;
+				}
+				if(cellV < minCellVoltage)
+				{
+					minCellVoltage = cellV;
+				}
+				numGoodCellVoltage++;
+				sumVoltage += cellV;
+			}
+
+			// Only update stats if sense status is good
+			if(pBmb->cellTempStatus[j] == GOOD)
+			{
+				float cellTemp = pBmb->cellTemp[j];
+
+				if (cellTemp > maxCellTemp)
+				{
+					maxCellTemp = cellTemp;
+				}
+				if (cellTemp < minCellTemp)
+				{
+					minCellTemp = cellTemp;
+				}
+				numGoodCellTemp++;
+				sumCellTemp += cellTemp;
+			}
+		}
+
+		// Update BMB statistics
+        // TODO: determine what to do with BAD sensor status variables
+        if(numGoodCellVoltage > 0)
+        {
+            pBmb->maxCellVoltage = maxCellVoltage;
+            pBmb->minCellVoltage = minCellVoltage;
+            pBmb->sumCellVoltage = sumVoltage;
+            pBmb->avgCellVoltage = (sumVoltage / numGoodCellVoltage);
+            pBmb->numBadCellVoltage = NUM_CELLS_PER_BMB - numGoodCellVoltage;
+        }
+
+        if(numGoodCellVoltage > 0)
+        {
+            pBmb->maxCellTemp = maxCellTemp;
+            pBmb->minCellTemp = minCellTemp;
+            pBmb->avgCellTemp = (sumCellTemp / numGoodCellTemp);
+            pBmb->numBadCellTemp = NUM_CELLS_PER_BMB - numGoodCellTemp;
+        }
+	}
+}
+
+static void updatePackStatistics(telemetryTaskData_S *taskData)
+{
+	// Update BMB level stats
+	updateBmbStatistics(taskData->bmb);
+
+	float maxCellVoltage = MIN_CELLV_SENSOR_VALUE;
+    float minCellVoltage = MAX_CELLV_SENSOR_VALUE;
+    float sumVoltage = 0.0f;
+    float sumAvgCellVoltage = 0.0f;
+    uint32_t numGoodBmbsCellV = 0;
+
+    float maxCellTemp = MIN_TEMP_SENSOR_VALUE_C;
+    float minCellTemp = MAX_TEMP_SENSOR_VALUE_C;
+    float sumAvgCellTemp = 0.0f;
+    uint32_t numGoodBmbsCellTemp = 0;
+
+	float maxBoardTemp = MIN_TEMP_SENSOR_VALUE_C;
+	float minBoardTemp = MAX_TEMP_SENSOR_VALUE_C;
+	float sumBoardTemp = 0.0f;
+    uint32_t numGoodBoardTemp = 0;
+
+	for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+	{
+		Bmb_S* pBmb = &taskData->bmb[i];
+
+        if(pBmb->numBadCellVoltage != NUM_CELLS_PER_BMB)
+        {
+            if(pBmb->maxCellVoltage > maxCellVoltage)
+            {
+                maxCellVoltage = pBmb->maxCellVoltage;
+            }
+            if(pBmb->minCellVoltage < minCellVoltage)
+            {
+                minCellVoltage = pBmb->minCellVoltage;
+            }
+
+            numGoodBmbsCellV++;
+            sumAvgCellVoltage += pBmb->avgCellVoltage;
+            sumVoltage += pBmb->sumCellVoltage;
+        }
+
+        if(pBmb->numBadCellTemp != NUM_CELLS_PER_BMB)
+        {
+            if (pBmb->maxCellTemp > maxCellTemp)
+            {
+                maxCellTemp = pBmb->maxCellTemp;
+            }
+            if (pBmb->minCellTemp < minCellTemp)
+            {
+                minCellTemp = pBmb->minCellTemp;
+            }
+
+            numGoodBmbsCellTemp++;
+            sumAvgCellTemp += pBmb->avgCellTemp;
+        }
+
+        if(pBmb->boardTempStatus == GOOD)
+        {
+            if (pBmb->boardTemp > maxBoardTemp)
+            {
+                maxBoardTemp = pBmb->boardTemp;
+            }
+            if (pBmb->boardTemp < minBoardTemp)
+            {
+                minBoardTemp = pBmb->boardTemp;
+            }
+
+            numGoodBoardTemp++;
+            sumBoardTemp += pBmb->boardTemp;
+        }
+	}
+
+    // TODO: Should i ignore this if bad sensors or open wires?
+    taskData->packVoltage = sumVoltage;
+
+    if(numGoodBmbsCellV > 0)
+    {
+        taskData->maxCellVoltage = maxCellVoltage;
+        taskData->minCellVoltage = minCellVoltage;
+        taskData->avgCellVoltage = sumAvgCellVoltage / numGoodBmbsCellV;
+    }
+
+    if(numGoodBmbsCellTemp > 0)
+    {
+        taskData->maxCellTemp = maxCellTemp;
+        taskData->minCellTemp = minCellTemp;
+        taskData->avgCellTemp = sumAvgCellTemp / numGoodBmbsCellTemp;
+    }
+
+    if(numGoodBoardTemp > 0)
+    {
+        taskData->maxBoardTemp = maxBoardTemp;
+        taskData->minBoardTemp = minBoardTemp;
+        taskData->avgBoardTemp = sumBoardTemp / numGoodBoardTemp;
+    }
+}
+
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
@@ -479,8 +615,19 @@ void initTelemetryTask()
         .localCommandCounter[PACK_MONITOR] = 0
     };
 
+    Soc_S defaultSocInfo = {
+        .packMilliCoulombs = PACK_MILLICOULOMBS,
+        .milliCoulombCounter = 0,
+        .socByOcvQualificationTimer = (Timer_S){.timCount = CELL_POLARIZATION_REST_MS, .lastUpdate = 0, .timThreshold = CELL_POLARIZATION_REST_MS},
+        .socByOcv = 0.0f,
+        .soeByOcv = 0.0f,
+        .socByCoulombCounting = 0.0f,
+        .soeByCoulombCounting = 0.0f
+    };
+
     vTaskSuspendAll();
     telemetryTaskData.chainInfo = defaultChainInfo;
+    telemetryTaskData.socData = defaultSocInfo;
     xTaskResumeAll();
 }
 
@@ -533,6 +680,11 @@ void runTelemetryTask()
         if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         {
             telemetryStatus = runCommandBlock(updateCellTemps, &telemetryTaskDataLocal);
+        }
+
+        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            updateSocSoe(&telemetryTaskDataLocal.socData, &socByOcvTable, &soeFromSocTable, telemetryTaskDataLocal.minCellVoltage, 0);
         }
     }
 
