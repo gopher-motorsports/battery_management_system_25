@@ -5,6 +5,7 @@
 /* ============================= INCLUDES ============================= */
 /* ==================================================================== */
 
+#include <stdbool.h>
 #include "adbms.h"
 #include "soc.h"
 
@@ -42,10 +43,16 @@ typedef enum
     BAD
 } SENSOR_STATUS_E;
 
+typedef enum
+{
+    MUX_STATE_0 = 0,
+    MUX_STATE_1,
+    NUM_MUX_STATES
+} MUX_STATE_E;
+
 /* ==================================================================== */
 /* ============================== STRUCTS ============================= */
 /* ==================================================================== */
-
 
 typedef struct
 {
@@ -73,7 +80,11 @@ typedef struct
 
 typedef struct
 {
+    bool chainInitialized;
+
 	Bmb_S bmb[NUM_BMBS_IN_ACCUMULATOR];
+
+    MUX_STATE_E muxState;
 
     CHAIN_INFO_S chainInfo;
 

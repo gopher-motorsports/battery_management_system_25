@@ -753,11 +753,25 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, CHAIN_INFO_S *chainInfo, COM
  * @param command Command code to send
  * @param chainInfo Chain data struct
  * @param commandType The type of command to determine which devices will recognize the command
- * @param txData Byte array of data to write to device chain
+ * @param packMonitorData Byte array of data to write to pack montior
+ * @param cellMonitorData Byte array of data to write to cell monitor chain
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E writeChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData)
+TRANSACTION_STATUS_E writeChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *packMonitorData, uint8_t *cellMonitorData)
 {
+    // Paste the pack monitor and cell monitor data in the correct location for a single tx buffer
+    uint8_t txData[REGISTER_SIZE_BYTES * chainInfo->numDevs];
+    if(chainInfo->packMonitorPort == PORTA)
+    {
+        memcpy(txData, packMonitorData, REGISTER_SIZE_BYTES);
+        memcpy(txData + REGISTER_SIZE_BYTES, cellMonitorData, REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1));
+    }
+    else if(chainInfo->packMonitorPort == PORTB)
+    {
+        memcpy(txData + (REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1)), packMonitorData, REGISTER_SIZE_BYTES);
+        memcpy(txData, cellMonitorData, REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1));
+    }
+
     // Check the current assumed chain status
     if(chainInfo->chainStatus == CHAIN_COMPLETE)
     {
@@ -822,14 +836,18 @@ TRANSACTION_STATUS_E writeChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMA
  * @brief Read from device registers on the device daisy chain
  * @param command Command code to send
  * @param chainInfo Chain data struct
- * @param rxData Byte array of data to populate with data from device chain
+ * @param packMonitorData Byte array of data to write to pack montior
+ * @param cellMonitorData Byte array of data to write to cell monitor chain
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData)
+TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *packMonitorData, uint8_t *cellMonitorData)
 {
     // This for loop allows the chain to attempt to correct itself once, but will end the fuction if it fails to update properly
     for(int32_t i = 0; i < 2; i++)
     {
+        // Local rx buffer from chain reading
+        uint8_t rxData[REGISTER_SIZE_BYTES * chainInfo->numDevs];
+
         // Check the current assumed chain status
         if(chainInfo->chainStatus == CHAIN_COMPLETE)
         {
@@ -838,6 +856,18 @@ TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_
 
             // When the chain is complete, send the command using the current chain port
             TRANSACTION_STATUS_E cmdStatus = readRegister(command, chainInfo->numDevs, rxData, chainInfo->currentPort, chainInfo->localCommandCounter, packMonitorIndex);
+
+            // Paste the pack monitor and cell monitor data in the correct location from a single rx buffer
+            if(chainInfo->packMonitorPort == PORTA)
+            {
+                memcpy(packMonitorData, rxData, REGISTER_SIZE_BYTES);
+                memcpy(cellMonitorData, rxData + REGISTER_SIZE_BYTES, REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1));
+            }
+            else if(chainInfo->packMonitorPort == PORTB)
+            {
+                memcpy(packMonitorData, rxData + (REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1)), REGISTER_SIZE_BYTES);
+                memcpy(cellMonitorData, rxData, REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1));
+            }
 
             // On success, return success
             // On SPI error, power on reset error, or command counter error, return the error code
@@ -886,7 +916,19 @@ TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_
                 uint32_t packMonitorIndexB = ((uint32_t)(!chainInfo->packMonitorPort)) * (chainInfo->numDevs - 1);
 
                 // The rxData pointer is shifted by the number of devices not available on the port, this allows data to be be sent to the appropiate device index
-                readRegister(command, chainInfo->availableDevices[PORTB], rxData + REGISTER_SIZE_BYTES * (chainInfo->numDevs - chainInfo->availableDevices[PORTB]), PORTB, chainInfo->localCommandCounter, packMonitorIndexB);
+                portBStatus = readRegister(command, chainInfo->availableDevices[PORTB], rxData + REGISTER_SIZE_BYTES * (chainInfo->numDevs - chainInfo->availableDevices[PORTB]), PORTB, chainInfo->localCommandCounter, packMonitorIndexB);
+            }
+
+            // Paste the pack monitor and cell monitor data in the correct location from a single rx buffer
+            if(chainInfo->packMonitorPort == PORTA)
+            {
+                memcpy(packMonitorData, rxData, REGISTER_SIZE_BYTES);
+                memcpy(cellMonitorData, rxData + REGISTER_SIZE_BYTES, REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1));
+            }
+            else if(chainInfo->packMonitorPort == PORTB)
+            {
+                memcpy(packMonitorData, rxData + (REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1)), REGISTER_SIZE_BYTES);
+                memcpy(cellMonitorData, rxData, REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1));
             }
 
             // Check the status of both transactions

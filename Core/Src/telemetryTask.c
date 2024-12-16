@@ -11,9 +11,6 @@
 #include "packData.h"
 #include "cellData.h"
 #include <string.h>
-#include <stdbool.h>
-
-#define NUM_READS  1
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -22,28 +19,10 @@
 #define NUM_COMMAND_BLOCK_RETRYS            3
 
 /* ==================================================================== */
-/* ========================= ENUMERATED TYPES========================== */
-/* ==================================================================== */
-
-typedef enum
-{
-    MUX_STATE_0 = 0,
-    MUX_STATE_1,
-    NUM_MUX_STATES
-} MUX_STATE_E;
-
-/* ==================================================================== */
-/* ============================== STRUCTS ============================= */
-/* ==================================================================== */
-
-/* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
 
-bool chainInitialized;
-MUX_STATE_E muxState;
-
-uint8_t bmbOrder[NUM_BMBS_IN_ACCUMULATOR] =
+const uint8_t bmbOrder[NUM_BMBS_IN_ACCUMULATOR] =
 {
     BMB0_SEGMENT_INDEX
     // BMB1_SEGMENT_INDEX
@@ -55,19 +34,20 @@ uint8_t bmbOrder[NUM_BMBS_IN_ACCUMULATOR] =
     // BMB7_SEGMENT_INDEX
 };
 
-uint16_t readVoltReg[NUM_CELLV_REGISTERS] =
+const uint16_t readVoltReg[NUM_CELLV_REGISTERS] =
 {
     RDCVA_RDI, RDCVB_RDVB,
     RDCVC, RDCVD,
     RDCVE, RDCVF,
 };
 
-uint16_t readAuxReg[NUM_AUXV_REGISTERS] =
+const uint16_t readAuxReg[NUM_AUXV_REGISTERS] =
 {
     RDAUXA,
     RDAUXB,
     RDAUXC
 };
+
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
@@ -91,29 +71,6 @@ static void updatePackStatistics(telemetryTaskData_S *taskData);
 /* ==================================================================== */
 /* ============================== MACROS ============================== */
 /* ==================================================================== */
-
-#define HANDLE_INIT_ERROR(error) \
-    if(error != TRANSACTION_SUCCESS) { \
-        if(error == TRANSACTION_CHAIN_BREAK_ERROR) \
-        { \
-            Debug("Chain break on init! Not all devices initialized\n"); \
-        } \
-        else if(error == TRANSACTION_SPI_ERROR) \
-        { \
-            Debug("SPI Failure, reseting STM32...\n"); \
-            HAL_NVIC_SystemReset(); \
-        } \
-        else if(error == TRANSACTION_POR_ERROR) \
-        { \
-            Debug("Power reset detected, reinitializing...\n"); \
-            continue; \
-        } \
-        else if(error == TRANSACTION_COMMAND_COUNTER_ERROR) \
-        { \
-            Debug("Command counter mismatch! Retrying command block!\n"); \
-            continue; \
-        } \
-    }
 
 #define EXTRACT_16_BIT(buffer)      (((uint32_t)buffer[1] << (1 * BITS_IN_BYTE)) | ((uint32_t)buffer[0]))
 
@@ -198,13 +155,13 @@ TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(t
 
 static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
 {
-    // Create and clear rx buffer
-    uint8_t rxBuffer[REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR];
-    memset(rxBuffer, 0, REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
+    // Create and clear pack monitor data buffer
+    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
-    // Create and clear tx buffer
-    uint8_t txBuffer[REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR];
-    memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
+    // Create and clear cell monitor data buffer
+    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
     TRANSACTION_STATUS_E status;
 
@@ -222,38 +179,40 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         return status;
     }
 
-    // Clear SLEEP Bit
-    for(int32_t i = 0; i < NUM_DEVICES_IN_ACCUMULATOR; i++)
+    // Clear RESET and SLEEP Bits
+    packMonitorDataBuffer[REGISTER_BYTE5] = STATC_SLEEP_BIT;
+    for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
-        txBuffer[(i * REGISTER_SIZE_BYTES) + 5] = STATC_SLEEP_BIT;
+        cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + REGISTER_BYTE5] = STATC_SLEEP_BIT;
     }
 
-    status = writeChain(CLRFLAG, &taskData->chainInfo, SHARED_COMMAND, txBuffer);
+    status = writeChain(CLRFLAG, &taskData->chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
     }
 
-    // Fill tx buffer with proper GPIO config bits to disable GPIO pulldowns
-    memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
-    txBuffer[3] = 0x3f;
-    txBuffer[4] = 0x3f;
-    txBuffer[5] = 0x01;
+    memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
+    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
-    for(int32_t i = NUM_PACK_MON_IN_ACCUMULATOR; i < NUM_DEVICES_IN_ACCUMULATOR; i++)
+    packMonitorDataBuffer[REGISTER_BYTE3] = ALL_PACK_MON_GPIO;
+    packMonitorDataBuffer[REGISTER_BYTE4] = ALL_PACK_MON_GPIO;
+    packMonitorDataBuffer[REGISTER_BYTE5] = ACCI_24;
+
+    for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
-        txBuffer[(i * REGISTER_SIZE_BYTES) + 3] = 0xFF;
-        txBuffer[(i * REGISTER_SIZE_BYTES) + 4] = (0x01 | ((uint8_t)muxState << 1));
+        cellMonitorDataBuffer[REGISTER_BYTE3] = ALL_CELL_MON_GPIO;
+        cellMonitorDataBuffer[REGISTER_BYTE4] = GPIO9;
     }
 
-    status = writeChain(WRCFGA, &taskData->chainInfo, SHARED_COMMAND, txBuffer);
+    status = writeChain(WRCFGA, &taskData->chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
     }
 
     // Verify command counter
-    status = readChain(RDSID, &taskData->chainInfo, rxBuffer);
+    status = readChain(RDSID, &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
@@ -264,26 +223,35 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
 
 static TRANSACTION_STATUS_E runSystemDiagnostics(telemetryTaskData_S *taskData)
 {
-    // Create and clear rx buffer
-    uint8_t rxBuffer[REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR];
-    memset(rxBuffer, 0, REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
+    // Create and clear pack monitor data buffer
+    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
+
+    // Create and clear cell monitor data buffer
+    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
     // ISOSPI status variable
     TRANSACTION_STATUS_E status;
 
     // Read status register group C
-    status = readChain(RDSTATC, &taskData->chainInfo, rxBuffer);
+    status = readChain(RDSTATC, &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
     }
 
-    // This code may be unessecary given how the commandChain function reinits the chain every cycle
+    // Extract the sleep bit from each data packet, and check if it is set
+    if((packMonitorDataBuffer[REGISTER_BYTE5]) & STATC_SLEEP_BIT)
+    {
+        return TRANSACTION_POR_ERROR;
+    }
+
     // Check for the sleep bit to detect a power reset
-    for(uint32_t i = NUM_PACK_MON_IN_ACCUMULATOR; i < NUM_DEVICES_IN_ACCUMULATOR; i++)
+    for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
         // Extract the sleep bit from each data packet, and check if it is set
-        uint8_t statC5 = rxBuffer[(i * REGISTER_SIZE_BYTES) + 5];
+        uint8_t statC5 = cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + REGISTER_BYTE5];
         if(statC5 & STATC_SLEEP_BIT)
         {
             return TRANSACTION_POR_ERROR;
@@ -295,13 +263,13 @@ static TRANSACTION_STATUS_E runSystemDiagnostics(telemetryTaskData_S *taskData)
 
 static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
 {
-    // Create and clear rx and tx buffers
-    uint8_t rxBuffer[REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR];
-    memset(rxBuffer, 0, REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
+    // Create and clear pack monitor data buffer
+    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
-    // Create and clear tx buffer
-    uint8_t txBuffer[REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR];
-    memset(txBuffer, 0, REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
+    // Create and clear cell monitor data buffer
+    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
     // ISOSPI status variable
     TRANSACTION_STATUS_E status;
@@ -323,24 +291,24 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
     // Swap BMB MUX state
 
     // Fill tx buffer with proper GPIO config bit to swap mux state
-    txBuffer[3] = 0x3f;
-    txBuffer[4] = 0x3f;
-    txBuffer[5] = 0x01;
+    packMonitorDataBuffer[REGISTER_BYTE3] = ALL_PACK_MON_GPIO;
+    packMonitorDataBuffer[REGISTER_BYTE4] = ALL_PACK_MON_GPIO;
+    packMonitorDataBuffer[REGISTER_BYTE5] = ACCI_24;
 
-    for(int32_t i = NUM_PACK_MON_IN_ACCUMULATOR; i < NUM_DEVICES_IN_ACCUMULATOR; i++)
+    for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
-        txBuffer[(i * REGISTER_SIZE_BYTES) + 3] = 0xFF;
-        txBuffer[(i * REGISTER_SIZE_BYTES) + 4] = (0x01 | ((uint8_t)muxState << 1));
+        cellMonitorDataBuffer[REGISTER_BYTE3] = ALL_CELL_MON_GPIO;
+        cellMonitorDataBuffer[REGISTER_BYTE4] = GPIO9;
     }
 
-    status = writeChain(WRCFGA, &taskData->chainInfo, SHARED_COMMAND, txBuffer);
+    status = writeChain(WRCFGA, &taskData->chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
     }
 
     // Verify command counter
-    status = readChain(RDSID, &taskData->chainInfo, rxBuffer);
+    status = readChain(RDSID, &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
@@ -351,67 +319,75 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
 
 static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData)
 {
-    // Create and clear rx buffer
-    uint8_t rxBuffer[NUM_CELLV_REGISTERS][REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR];
-    memset(rxBuffer, 0, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
+    // Create and clear pack monitor data buffer
+    uint8_t packMonitorDataBuffer[NUM_CELLV_REGISTERS][REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
+
+    // Create and clear cell monitor data buffer
+    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
     TRANSACTION_STATUS_E status;
 
     // Read cell voltage registers A-E, and populate cell voltages to data struct
     for(uint32_t i = 0; i < NUM_CELLV_REGISTERS; i++)
     {
-        status = readChain(readVoltReg[i], &taskData->chainInfo, rxBuffer[i]);
+        status = readChain(readVoltReg[i], &taskData->chainInfo, packMonitorDataBuffer[i], cellMonitorDataBuffer);
         if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
         {
             return status;
         }
 
         // Ignore Pack monitor data for now, it is retained in the rxbuffer for later conversion
-        convertCellVoltageRegister((rxBuffer[i] + (REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR)), (i * CELLS_PER_REG), taskData->bmb);
+        convertCellVoltageRegister(cellMonitorDataBuffer, (i * CELLS_PER_REG), taskData->bmb);
     }
 
     // Extract IADC1 and IADC2 data from current sense ADCs
-    taskData->IADC1 = CONVERT_IADC1(rxBuffer[0]);
-    taskData->IADC2 = CONVERT_IADC2((rxBuffer[0] + ENERGY_DATA_SIZE));
+    taskData->IADC1 = CONVERT_IADC1(packMonitorDataBuffer[0]);
+    taskData->IADC2 = CONVERT_IADC2((packMonitorDataBuffer[0] + ENERGY_DATA_SIZE));
 
     // Extract VBADC1 and VBADC2 data from battery voltage ADCs
-    taskData->VBADC1 = CONVERT_VBADC1((rxBuffer[1] + VBATT_DATA_SIZE));
-    taskData->VBADC2 = CONVERT_VBADC2((rxBuffer[1] + (2 * VBATT_DATA_SIZE)));
+    taskData->VBADC1 = CONVERT_VBADC1((packMonitorDataBuffer[1] + VBATT_DATA_SIZE));
+    taskData->VBADC2 = CONVERT_VBADC2((packMonitorDataBuffer[1] + (2 * VBATT_DATA_SIZE)));
 
     return status;
 }
 
 static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
 {
-    // Create and clear rx buffer
-    uint8_t rxBuffer[NUM_AUXV_REGISTERS][REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR];
-    memset(rxBuffer, 0, NUM_AUXV_REGISTERS * REGISTER_SIZE_BYTES * NUM_DEVICES_IN_ACCUMULATOR);
+    // Create and clear pack monitor data buffer
+    uint8_t packMonitorDataBuffer[NUM_CELLV_REGISTERS][REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
+
+    // Create and clear cell monitor data buffer
+    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
 
     TRANSACTION_STATUS_E status;
 
     // Read aux voltage registers A-C, and populate cell temps to data struct
     for(uint32_t i = 0; i < NUM_AUXV_REGISTERS; i++)
     {
-        status = readChain(readAuxReg[i], &taskData->chainInfo, rxBuffer[i]);
+        status = readChain(readAuxReg[i], &taskData->chainInfo, packMonitorDataBuffer[i], cellMonitorDataBuffer);
         if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
         {
             return status;
         }
 
         // Each mux state corresponds to odd or even cell temps
-        uint32_t cellStartIndex = (i * 2 * CELLS_PER_REG) + (uint32_t)muxState;
+        uint32_t cellStartIndex = (i * 2 * CELLS_PER_REG) + (uint32_t)taskData->muxState;
 
         // Ignore Pack monitor data for now, it is retained in the rxbuffer for later conversion
-        convertCellTempRegister((rxBuffer[i] + (REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR)), cellStartIndex, taskData->bmb);
+        convertCellTempRegister(cellMonitorDataBuffer, cellStartIndex, taskData->bmb);
     }
 
     // Cycle mux state
-    muxState++;
-    muxState %= NUM_MUX_STATES;
+    taskData->muxState++;
+    taskData->muxState %= NUM_MUX_STATES;
 
     for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
-        float adcVoltage = CONVERT_VADC((rxBuffer[NUM_AUXV_REGISTERS-1] + (REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR) + (i * REGISTER_SIZE_BYTES) + (2 * CELL_REG_SIZE)));
+        float adcVoltage = CONVERT_VADC((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (2 * CELL_REG_SIZE)));
         taskData->bmb[bmbOrder[i]].boardTemp = lookup(adcVoltage, &boardTempTable);
         taskData->bmb[bmbOrder[i]].boardTempStatus = GOOD;
     }
@@ -643,7 +619,7 @@ void runTelemetryTask()
 
     TRANSACTION_STATUS_E telemetryStatus = TRANSACTION_SUCCESS;
 
-    if(chainInitialized)
+    if(telemetryTaskDataLocal.chainInitialized)
     {
         // Ready up isospi comms
         readyChain(&telemetryTaskDataLocal.chainInfo);
@@ -688,7 +664,7 @@ void runTelemetryTask()
         }
     }
 
-    if(!chainInitialized || (telemetryStatus == TRANSACTION_POR_ERROR))
+    if(!telemetryTaskDataLocal.chainInitialized || (telemetryStatus == TRANSACTION_POR_ERROR))
     {
         Debug("Initializing chain...\n");
         wakeChain(&telemetryTaskDataLocal.chainInfo);
@@ -696,12 +672,12 @@ void runTelemetryTask()
         if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         {
             Debug("BMB initialization successful!\n");
-            chainInitialized = true;
+            telemetryTaskDataLocal.chainInitialized = true;
         }
         else
         {
             Debug("BMBs failed to initialize!\n");
-            chainInitialized = false;
+            telemetryTaskDataLocal.chainInitialized = false;
         }
     }
 
@@ -729,11 +705,8 @@ void runTelemetryTask()
 
     // TODO Handle case of continous POR / CC errors here
 
-    if(telemetryStatus == TRANSACTION_SUCCESS || telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR)
-    {
-        // Copy out new data into global data struct
-        vTaskSuspendAll();
-        telemetryTaskData = telemetryTaskDataLocal;
-        xTaskResumeAll();
-    }
+    // Copy out new data into global data struct
+    vTaskSuspendAll();
+    telemetryTaskData = telemetryTaskDataLocal;
+    xTaskResumeAll();
 }
