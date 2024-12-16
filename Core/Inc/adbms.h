@@ -16,6 +16,13 @@
 #define BYTE_SIZE_DEC       256
 #define BYTES_IN_WORD       2
 
+#define REGISTER_BYTE0      0
+#define REGISTER_BYTE1      1
+#define REGISTER_BYTE2      2
+#define REGISTER_BYTE3      3
+#define REGISTER_BYTE4      4
+#define REGISTER_BYTE5      5
+
 #define COMMAND_SIZE_BYTES       2
 #define REGISTER_SIZE_BYTES      6
 
@@ -246,6 +253,29 @@
 // Status register C sleep bit
 #define STATC_SLEEP_BIT 0x08
 
+#define ACCI_4 0x0
+#define ACCI_8 0x1
+#define ACCI_12 0x2
+#define ACCI_16 0x3
+#define ACCI_20 0x4
+#define ACCI_24 0x5
+#define ACCI_28 0x6
+#define ACCI_32 0x7
+
+#define ALL_PACK_MON_GPIO 0x3F
+#define ALL_CELL_MON_GPIO 0xFF
+
+#define GPIO1 (1)
+#define GPIO2 (1 << 1)
+#define GPIO3 (1 << 2)
+#define GPIO4 (1 << 3)
+#define GPIO5 (1 << 4)
+#define GPIO6 (1 << 5)
+#define GPIO7 (1 << 6)
+#define GPIO8 (1 << 7)
+#define GPIO9 (1)
+#define GPIO10 (1 << 1)
+
 /* END ADBMS Register addresses */
 
 /* ==================================================================== */
@@ -351,19 +381,21 @@ TRANSACTION_STATUS_E commandChain(uint16_t command, CHAIN_INFO_S *chainInfo, COM
  * @param command Command code to send
  * @param chainInfo Chain data struct
  * @param commandType The type of command to determine which devices will recognize the command
- * @param txData Byte array of data to write to device chain
+ * @param packMonitorData Byte array of data to write to pack montior
+ * @param cellMonitorData Byte array of data to write to cell monitor chain
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E writeChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData);
+TRANSACTION_STATUS_E writeChain(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *packMonitorData, uint8_t *cellMonitorData);
 
 /**
  * @brief Read from device registers on the device daisy chain
  * @param command Command code to send
  * @param chainInfo Chain data struct
- * @param rxData Byte array of data to populate with data from device chain
+ * @param packMonitorData Byte array of data to write to pack montior
+ * @param cellMonitorData Byte array of data to write to cell monitor chain
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData);
+TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *packMonitorData, uint8_t *cellMonitorData);
 
 /**
  * @brief Write only to pack monitor register
