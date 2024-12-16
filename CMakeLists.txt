@@ -53,6 +53,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../../Core/Src/telemetryTask.c
     ../../Core/Src/utils.c
     ../../Core/Src/lookupTable.c
+    ../../Core/Src/timer.c
+    ../../Core/Src/soc.c
+    ../../Core/Src/cellData.c
+    ../../Core/Src/packData.c
 )
 
 # Enable floating point support for printf

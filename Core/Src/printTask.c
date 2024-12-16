@@ -189,4 +189,16 @@ void runPrintTask()
     printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
     printf("VBADC2: %f\n", printTaskInputData.telemetryTaskData.VBADC2);
 
+    printf("\n");
+    printf("Max Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.maxCellVoltage);
+    printf("Min Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.minCellVoltage);
+    printf("Max Cell Temp: %f\n", printTaskInputData.telemetryTaskData.maxCellTemp);
+    printf("Min Cell Temp: %f\n", printTaskInputData.telemetryTaskData.minCellTemp);
+
+    printf("\n");
+    printf("SOC by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.socByOcv * 100.0f);
+    printf("SOE by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.soeByOcv * 100.0f);
+    printf("SOC by CC: %f\n", printTaskInputData.telemetryTaskData.socData.socByCoulombCounting * 100.0f);
+    printf("SOE by CC: %f\n", printTaskInputData.telemetryTaskData.socData.soeByCoulombCounting * 100.0f);
+
 }
