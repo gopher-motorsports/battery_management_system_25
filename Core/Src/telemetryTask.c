@@ -18,6 +18,15 @@
 
 #define NUM_COMMAND_BLOCK_RETRYS            3
 
+#define FAULT_TOLERANT_TIME_INTERVAL_MS     500
+#define OPEN_WIRE_SOAK_TIME_MS              40
+
+#define FAULT_TOLERANT_TIME_INTERVAL_CYC    (FAULT_TOLERANT_TIME_INTERVAL_MS / TELEMETRY_TASK_PERIOD_MS)
+#define OPEN_WIRE_SOAK_TIME_CYC             (OPEN_WIRE_SOAK_TIME_MS / TELEMETRY_TASK_PERIOD_MS)
+#define REDUNDANT_CHECK_TIME_CYC            1
+#define BALANCING_TIME_CYC                  (FAULT_TOLERANT_TIME_INTERVAL_CYC - (2 * OPEN_WIRE_SOAK_TIME_CYC) - (REDUNDANT_CHECK_TIME_CYC))
+
+
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
@@ -41,6 +50,13 @@ const uint16_t readVoltReg[NUM_CELLV_REGISTERS] =
     RDCVE, RDCVF,
 };
 
+const uint16_t readDiagVoltReg[NUM_CELLV_REGISTERS] =
+{
+    RDSVA, RDSVB,
+    RDSVC, RDSVD,
+    RDSVE, RDSVF,
+};
+
 const uint16_t readAuxReg[NUM_AUXV_REGISTERS] =
 {
     RDAUXA,
@@ -53,7 +69,7 @@ const uint16_t readAuxReg[NUM_AUXV_REGISTERS] =
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
-static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray);
+static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray, bool diagnosticAdc);
 static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray);
 
 TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(telemetryTaskData_S*), telemetryTaskData_S *taskData);
@@ -62,8 +78,9 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E runSystemDiagnostics(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData);
+static TRANSACTION_STATUS_E updateDiagnosticCellVoltages(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData);
-// static TRANSACTION_STATUS_E runSPinDiagnostics(telemetryTaskData_S *taskData);
+static TRANSACTION_STATUS_E runAdcDiagnostics(telemetryTaskData_S *taskData);
 
 static void updateBmbStatistics(Bmb_S *bmb);
 static void updatePackStatistics(telemetryTaskData_S *taskData);
@@ -90,7 +107,7 @@ static void updatePackStatistics(telemetryTaskData_S *taskData);
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
 
-static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray)
+static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray, bool diagnosticAdc)
 {
     int32_t cellsInReg = CELLS_PER_REG;
     if((NUM_CELLS_PER_BMB - cellStartIndex) < CELLS_PER_REG)
@@ -103,8 +120,16 @@ static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex
         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
         {
             float cellVoltage = CONVERT_VADC((bmbData + (j * REGISTER_SIZE_BYTES) + (i * CELL_REG_SIZE)));
-            bmbArray[bmbOrder[j]].cellVoltage[(cellStartIndex + i)] = cellVoltage;
-            bmbArray[bmbOrder[j]].cellVoltageStatus[(cellStartIndex + i)] = GOOD;
+            if(!diagnosticAdc)
+            {
+                bmbArray[bmbOrder[j]].cellVoltage[(cellStartIndex + i)] = cellVoltage;
+                bmbArray[bmbOrder[j]].cellVoltageStatus[(cellStartIndex + i)] = GOOD;
+            }
+            else
+            {
+                bmbArray[bmbOrder[j]].diagnosticCellVoltage[(cellStartIndex + i)] = cellVoltage;
+                bmbArray[bmbOrder[j]].diagnosticCellVoltageStatus[(cellStartIndex + i)] = GOOD;
+            }
         }
     }
 }
@@ -339,7 +364,7 @@ static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData)
         }
 
         // Ignore Pack monitor data for now, it is retained in the rxbuffer for later conversion
-        convertCellVoltageRegister(cellMonitorDataBuffer, (i * CELLS_PER_REG), taskData->bmb);
+        convertCellVoltageRegister(cellMonitorDataBuffer, (i * CELLS_PER_REG), taskData->bmb, false);
     }
 
     // Extract IADC1 and IADC2 data from current sense ADCs
@@ -349,6 +374,34 @@ static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData)
     // Extract VBADC1 and VBADC2 data from battery voltage ADCs
     taskData->VBADC1 = CONVERT_VBADC1((packMonitorDataBuffer[1] + VBATT_DATA_SIZE));
     taskData->VBADC2 = CONVERT_VBADC2((packMonitorDataBuffer[1] + (2 * VBATT_DATA_SIZE)));
+
+    return status;
+}
+
+static TRANSACTION_STATUS_E updateDiagnosticCellVoltages(telemetryTaskData_S *taskData)
+{
+    // Create and clear pack monitor data buffer
+    uint8_t packMonitorDataBuffer[NUM_CELLV_REGISTERS][REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
+
+    // Create and clear cell monitor data buffer
+    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
+    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+
+    TRANSACTION_STATUS_E status;
+
+    // Read cell voltage registers A-E, and populate cell voltages to data struct
+    for(uint32_t i = 0; i < NUM_CELLV_REGISTERS; i++)
+    {
+        status = readChain(readDiagVoltReg[i], &taskData->chainInfo, packMonitorDataBuffer[i], cellMonitorDataBuffer);
+        if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            return status;
+        }
+
+        // Ignore Pack monitor data for now, it is retained in the rxbuffer for later conversion
+        convertCellVoltageRegister(cellMonitorDataBuffer, (i * CELLS_PER_REG), taskData->bmb, true);
+    }
 
     return status;
 }
@@ -395,7 +448,103 @@ static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
     return status;
 }
 
-// static TRANSACTION_STATUS_E runSPinDiagnostics(telemetryTaskData_S *taskData);
+static TRANSACTION_STATUS_E runAdcDiagnostics(telemetryTaskData_S *taskData)
+{
+    TRANSACTION_STATUS_E status;
+
+    status = updateDiagnosticCellVoltages(taskData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    taskData->curentDiagnosticState = taskData->nextDiagnosticState;
+
+    // Use the current diagnostic cycle count to determine the state of the diagnostic data and start the adc for next cycle
+    taskData->diagnosticCycleCounter++;
+    switch (taskData->curentDiagnosticState)
+    {
+    case REDUNDANT_ADC_DIAG_STATE:
+        if(taskData->balancingEnabled)
+        {
+            if(taskData->diagnosticCycleCounter >= REDUNDANT_CHECK_TIME_CYC)
+            {
+                status = commandChain(ADSV | ADC_DCP, &taskData->chainInfo, SHARED_COMMAND);
+                if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+                {
+                    return status;
+                }
+                taskData->diagnosticCycleCounter = 0;
+                taskData->nextDiagnosticState = BALANCING_DIAG_STATE;
+            }
+        }
+        else
+        {
+            if(taskData->diagnosticCycleCounter >= (REDUNDANT_CHECK_TIME_CYC + BALANCING_TIME_CYC))
+            {
+                status = commandChain(ADSV | ADC_CONT | ADC_OW_EVEN, &taskData->chainInfo, SHARED_COMMAND);
+                if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+                {
+                    return status;
+                }
+                taskData->diagnosticCycleCounter = 0;
+                taskData->nextDiagnosticState = OPEN_WIRE_EVEN_DIAG_STATE;
+            }
+        }
+        break;
+
+    case BALANCING_DIAG_STATE:
+        if(taskData->diagnosticCycleCounter >= BALANCING_TIME_CYC)
+        {
+            status = commandChain(ADSV | ADC_CONT | ADC_OW_EVEN, &taskData->chainInfo, SHARED_COMMAND);
+            if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+            {
+                return status;
+            }
+            taskData->diagnosticCycleCounter = 0;
+            taskData->nextDiagnosticState = OPEN_WIRE_EVEN_DIAG_STATE;
+        }
+        break;
+
+    case OPEN_WIRE_EVEN_DIAG_STATE:
+        if(taskData->diagnosticCycleCounter >= OPEN_WIRE_SOAK_TIME_CYC)
+        {
+            status = commandChain(ADSV | ADC_CONT | ADC_OW_ODD, &taskData->chainInfo, SHARED_COMMAND);
+            if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+            {
+                return status;
+            }
+            taskData->diagnosticCycleCounter = 0;
+            taskData->nextDiagnosticState = OPEN_WIRE_ODD_DIAG_STATE;
+        }
+        break;
+
+    case OPEN_WIRE_ODD_DIAG_STATE:
+        if(taskData->diagnosticCycleCounter >= OPEN_WIRE_SOAK_TIME_CYC)
+        {
+            status = commandChain(ADSV | ADC_CONT, &taskData->chainInfo, SHARED_COMMAND);
+            if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+            {
+                return status;
+            }
+            taskData->diagnosticCycleCounter = 0;
+            taskData->nextDiagnosticState = REDUNDANT_ADC_DIAG_STATE;
+        }
+        break;
+
+    default:
+        status = commandChain(ADSV | ADC_CONT, &taskData->chainInfo, SHARED_COMMAND);
+        if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            return status;
+        }
+        taskData->diagnosticCycleCounter = 0;
+        taskData->nextDiagnosticState = REDUNDANT_ADC_DIAG_STATE;
+        break;
+    }
+
+    return status;
+}
 
 static void updateBmbStatistics(Bmb_S *bmb)
 {
@@ -658,8 +807,15 @@ void runTelemetryTask()
             telemetryStatus = runCommandBlock(updateCellTemps, &telemetryTaskDataLocal);
         }
 
+        // Read in adc diagnostics
         if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         {
+            telemetryStatus = runCommandBlock(runAdcDiagnostics, &telemetryTaskDataLocal);
+        }
+
+        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            updatePackStatistics(&telemetryTaskDataLocal);
             updateSocSoe(&telemetryTaskDataLocal.socData, &socByOcvTable, &soeFromSocTable, telemetryTaskDataLocal.minCellVoltage, 0);
         }
     }

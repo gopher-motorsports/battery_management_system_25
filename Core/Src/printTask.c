@@ -174,9 +174,9 @@ void initPrintTask()
 void runPrintTask()
 {
     PrintTaskInputData_S printTaskInputData;
-    taskENTER_CRITICAL();
+    vTaskSuspendAll();
     printTaskInputData.telemetryTaskData = telemetryTaskData;
-    taskEXIT_CRITICAL();
+    xTaskResumeAll();
 
     // Clear terminal output
     printf("\e[1;1H\e[2J");
@@ -200,5 +200,26 @@ void runPrintTask()
     printf("SOE by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.soeByOcv * 100.0f);
     printf("SOC by CC: %f\n", printTaskInputData.telemetryTaskData.socData.socByCoulombCounting * 100.0f);
     printf("SOE by CC: %f\n", printTaskInputData.telemetryTaskData.socData.soeByCoulombCounting * 100.0f);
+
+    // printf("\n");
+    // printf("Diagnostic state: ");
+    // switch(printTaskInputData.telemetryTaskData.curentDiagnosticState)
+    // {
+    //     case REDUNDANT_ADC_DIAG_STATE:
+    //         printf("REDUNDANT\n");
+    //         break;
+    //     case BALANCING_DIAG_STATE:
+    //         printf("BALANCING\n");
+    //         break;
+    //     case OPEN_WIRE_EVEN_DIAG_STATE:
+    //         printf("OPEN WIRE EVEN\n");
+    //         break;
+    //     case OPEN_WIRE_ODD_DIAG_STATE:
+    //         printf("OPEN WIRE ODD\n");
+    //         break;
+
+    //     default:
+    //         break;
+    // }
 
 }

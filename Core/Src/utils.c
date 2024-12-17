@@ -55,7 +55,7 @@ SPI_STATUS_E taskNotifySPI(SPI_HandleTypeDef* hspi, uint8_t* txBuffer, uint8_t* 
 
         // Wait for SPI interrupt to occur. NotificationFlags will hold notification value indicating status of transaction
         uint32_t notificationFlags = 0;
-        if(!xTaskNotifyWait(TASK_NO_OP, TASK_CLEAR_FLAGS, &notificationFlags, timeout))
+        if(xTaskNotifyWait(TASK_NO_OP, TASK_CLEAR_FLAGS, &notificationFlags, timeout) != pdTRUE)
         {
             // If no SPI interrupt occurs in time, transaction is aborted to prevent any longer delay
             HAL_SPI_Abort_IT(hspi);

@@ -50,6 +50,15 @@ typedef enum
     NUM_MUX_STATES
 } MUX_STATE_E;
 
+typedef enum
+{
+    REDUNDANT_ADC_DIAG_STATE = 0,
+    BALANCING_DIAG_STATE,
+    OPEN_WIRE_EVEN_DIAG_STATE,
+    OPEN_WIRE_ODD_DIAG_STATE,
+    NUM_ADC_DIAG_STATES
+} ADC_DIAG_STATE_E;
+
 /* ==================================================================== */
 /* ============================== STRUCTS ============================= */
 /* ==================================================================== */
@@ -58,6 +67,9 @@ typedef struct
 {
     float cellVoltage[NUM_CELLS_PER_BMB];
     SENSOR_STATUS_E cellVoltageStatus[NUM_CELLS_PER_BMB];
+
+    float diagnosticCellVoltage[NUM_CELLS_PER_BMB];
+    SENSOR_STATUS_E diagnosticCellVoltageStatus[NUM_CELLS_PER_BMB];
 
     float cellTemp[NUM_CELLS_PER_BMB];
     SENSOR_STATUS_E cellTempStatus[NUM_CELLS_PER_BMB];
@@ -83,6 +95,12 @@ typedef struct
     bool chainInitialized;
 
 	Bmb_S bmb[NUM_BMBS_IN_ACCUMULATOR];
+
+    ADC_DIAG_STATE_E curentDiagnosticState;
+    ADC_DIAG_STATE_E nextDiagnosticState;
+    uint32_t diagnosticCycleCounter;
+
+    bool balancingEnabled;
 
     MUX_STATE_E muxState;
 
