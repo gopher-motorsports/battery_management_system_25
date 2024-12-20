@@ -72,7 +72,7 @@ const uint16_t readAuxReg[NUM_AUXV_REGISTERS] =
 static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray, bool diagnosticAdc);
 static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray);
 
-TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(telemetryTaskData_S*), telemetryTaskData_S *taskData);
+static TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(telemetryTaskData_S*), telemetryTaskData_S *taskData);
 
 static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E runSystemDiagnostics(telemetryTaskData_S *taskData);
@@ -80,6 +80,7 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateDiagnosticCellVoltages(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData);
+static TRANSACTION_STATUS_E updateEnergyData(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E runAdcDiagnostics(telemetryTaskData_S *taskData);
 
 static void updateBmbStatistics(Bmb_S *bmb);
@@ -153,7 +154,7 @@ static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, B
     }
 }
 
-TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(telemetryTaskData_S*), telemetryTaskData_S *taskData)
+static TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(telemetryTaskData_S*), telemetryTaskData_S *taskData)
 {
     for(uint32_t attempt = 0; attempt < NUM_COMMAND_BLOCK_RETRYS; attempt++)
     {
@@ -196,6 +197,8 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
     {
         return status;
     }
+
+    clearTimer(&taskData->packMonitorData.localPhaseTimer);
 
     // Start Aux ADC on BMBs
     status = commandChain(ADAX, &taskData->chainInfo, CELL_MONITOR_COMMAND);
@@ -282,6 +285,20 @@ static TRANSACTION_STATUS_E runSystemDiagnostics(telemetryTaskData_S *taskData)
             return TRANSACTION_POR_ERROR;
         }
     }
+
+    uint32_t countMSB = (packMonitorDataBuffer[REGISTER_BYTE2] & 0x1F);
+    uint32_t countLSB = packMonitorDataBuffer[REGISTER_BYTE3];
+    uint32_t I1CNTPHA = (countMSB << BITS_IN_BYTE) | countLSB;
+
+    if(I1CNTPHA < taskData->packMonitorData.lastPhaseCount)
+    {
+        taskData->packMonitorData.adcPhaseCounter += (I1CNTPHA + (8192 - taskData->packMonitorData.lastPhaseCount));
+    }
+    else
+    {
+        taskData->packMonitorData.adcPhaseCounter += (I1CNTPHA - taskData->packMonitorData.lastPhaseCount);
+    }
+    taskData->packMonitorData.lastPhaseCount = I1CNTPHA;
 
     return status;
 }
@@ -446,6 +463,11 @@ static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
     }
 
     return status;
+}
+
+static TRANSACTION_STATUS_E updateEnergyData(telemetryTaskData_S *taskData)
+{
+
 }
 
 static TRANSACTION_STATUS_E runAdcDiagnostics(telemetryTaskData_S *taskData)
@@ -753,6 +775,7 @@ void initTelemetryTask()
     vTaskSuspendAll();
     telemetryTaskData.chainInfo = defaultChainInfo;
     telemetryTaskData.socData = defaultSocInfo;
+    telemetryTaskData.packMonitorData.localPhaseTimer.timThreshold = UINT32_MAX;
     xTaskResumeAll();
 }
 
@@ -783,16 +806,16 @@ void runTelemetryTask()
             }
         }
 
-        // Run system diagnostics
-        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        {
-            telemetryStatus = runCommandBlock(runSystemDiagnostics, &telemetryTaskDataLocal);
-        }
-
         // Configure registers for new telemetry data read
         if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         {
             telemetryStatus = runCommandBlock(startNewReadCycle, &telemetryTaskDataLocal);
+        }
+
+        // Run system diagnostics
+        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            telemetryStatus = runCommandBlock(runSystemDiagnostics, &telemetryTaskDataLocal);
         }
 
         // Read in cell voltages
