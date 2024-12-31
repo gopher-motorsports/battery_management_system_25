@@ -262,6 +262,11 @@
 #define ACCI_28 0x6
 #define ACCI_32 0x7
 
+#define IADC_QUALIFICATION_TIME_MS          132
+#define ACCUMULATION_REGISTER_COUNT         24
+#define ACCN_CTRL_BITS                      ((uint8_t)(ACCUMULATION_REGISTER_COUNT / 4) - 1)
+#define PHASE_COUNTS_PER_MS                 4
+
 #define ALL_PACK_MON_GPIO 0x3F
 #define ALL_CELL_MON_GPIO 0xFF
 
@@ -275,6 +280,14 @@
 #define GPIO8 (1 << 7)
 #define GPIO9 (1)
 #define GPIO10 (1 << 1)
+
+#define CADC_FILTER_CUTOFF_110HZ    0x01
+#define CADC_FILTER_CUTOFF_45HZ     0x02
+#define CADC_FILTER_CUTOFF_21HZ     0x03
+#define CADC_FILTER_CUTOFF_10HZ     0x04
+#define CADC_FILTER_CUTOFF_5HZ      0x05
+#define CADC_FILTER_CUTOFF_1HZ25    0x06
+#define CADC_FILTER_CUTOFF_0HZ625   0x07
 
 /* END ADBMS Register addresses */
 
@@ -405,7 +418,7 @@ TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_
  * @param txData Byte array of data to write to the pack monitor
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData);
+TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *packMonitorData);
 
 /**
  * @brief Read only from pack monitor register
@@ -414,6 +427,6 @@ TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo,
  * @param rxData Byte array of data to populate with data from the pack monitor
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E readPackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData);
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *packMonitorData);
 
 #endif /* INC_ADBMS_H_ */

@@ -92,9 +92,13 @@ typedef struct
 
 typedef struct
 {
-    Timer_S localPhaseTimer;
-    uint32_t lastPhaseCount;
-    uint32_t adcPhaseCounter;  // Count phase counter - increments by 4 every ADC conversion
+    Timer_S localPhaseCountTimer;
+    uint16_t lastPhaseCount;
+    uint32_t adcConversionPhaseCounter;
+    uint32_t nextGoodAccumulationDataPhaseCount;
+    float adcConversionTimeMS;
+
+    float shuntResistanceMicroOhms;
 } Pack_Monitor_S;
 
 
@@ -123,7 +127,7 @@ typedef struct
     float VBADC1;
     float VBADC2;
 
-    
+
 
     uint8_t testData[NUM_DEVICES_IN_ACCUMULATOR][REGISTER_SIZE_BYTES];
     TRANSACTION_STATUS_E testStatus[NUM_DEVICES_IN_ACCUMULATOR];

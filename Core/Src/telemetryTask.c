@@ -26,6 +26,7 @@
 #define REDUNDANT_CHECK_TIME_CYC            1
 #define BALANCING_TIME_CYC                  (FAULT_TOLERANT_TIME_INTERVAL_CYC - (2 * OPEN_WIRE_SOAK_TIME_CYC) - (REDUNDANT_CHECK_TIME_CYC))
 
+#define MAX_13BIT_UINT                      0x1FFF
 
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
@@ -48,6 +49,13 @@ const uint16_t readVoltReg[NUM_CELLV_REGISTERS] =
     RDCVA_RDI, RDCVB_RDVB,
     RDCVC, RDCVD,
     RDCVE, RDCVF,
+};
+
+const uint16_t readFiltVoltReg[NUM_CELLV_REGISTERS] =
+{
+    RDFCA, RDFCB,
+    RDFCC, RDFCD,
+    RDFCE, RDFCF,
 };
 
 const uint16_t readDiagVoltReg[NUM_CELLV_REGISTERS] =
@@ -75,7 +83,6 @@ static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, B
 static TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(telemetryTaskData_S*), telemetryTaskData_S *taskData);
 
 static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData);
-static TRANSACTION_STATUS_E runSystemDiagnostics(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateDiagnosticCellVoltages(telemetryTaskData_S *taskData);
@@ -100,9 +107,9 @@ static void updatePackStatistics(telemetryTaskData_S *taskData);
 
 #define CONVERT_VBADC2(reg)         ((int16_t)(EXTRACT_16_BIT(reg)) * VBADC2_GAIN * -1.0f)
 
-#define CONVERT_IADC1(reg)          ((((int32_t)(EXTRACT_24_BIT(reg) << BITS_IN_BYTE)) /  BYTE_SIZE_DEC) * IADC_GAIN)
+#define CONVERT_IADC1(reg)          (((int32_t)(EXTRACT_24_BIT(reg) << BITS_IN_BYTE)) /  BYTE_SIZE_DEC)
 
-#define CONVERT_IADC2(reg)          ((((int32_t)(EXTRACT_24_BIT(reg) << BITS_IN_BYTE)) /  BYTE_SIZE_DEC) * IADC_GAIN * 1.0f)
+#define CONVERT_IADC2(reg)          ((((int32_t)(EXTRACT_24_BIT(reg) << BITS_IN_BYTE)) /  BYTE_SIZE_DEC) * -1)
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
@@ -198,7 +205,10 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         return status;
     }
 
-    clearTimer(&taskData->packMonitorData.localPhaseTimer);
+    clearTimer(&taskData->packMonitorData.localPhaseCountTimer);
+    taskData->packMonitorData.lastPhaseCount = 0;
+    taskData->packMonitorData.adcConversionPhaseCounter = 0;
+    taskData->packMonitorData.nextGoodAccumulationDataPhaseCount = ((uint32_t)(IADC_QUALIFICATION_TIME_MS / ACCUMULATION_REGISTER_COUNT) + 2) * ACCUMULATION_REGISTER_COUNT * PHASE_COUNTS_PER_MS;
 
     // Start Aux ADC on BMBs
     status = commandChain(ADAX, &taskData->chainInfo, CELL_MONITOR_COMMAND);
@@ -225,12 +235,13 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
 
     packMonitorDataBuffer[REGISTER_BYTE3] = ALL_PACK_MON_GPIO;
     packMonitorDataBuffer[REGISTER_BYTE4] = ALL_PACK_MON_GPIO;
-    packMonitorDataBuffer[REGISTER_BYTE5] = ACCI_24;
+    packMonitorDataBuffer[REGISTER_BYTE5] = ACCN_CTRL_BITS;
 
     for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
         cellMonitorDataBuffer[REGISTER_BYTE3] = ALL_CELL_MON_GPIO;
         cellMonitorDataBuffer[REGISTER_BYTE4] = GPIO9;
+        cellMonitorDataBuffer[REGISTER_BYTE5] = CADC_FILTER_CUTOFF_21HZ;
     }
 
     status = writeChain(WRCFGA, &taskData->chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
@@ -245,60 +256,6 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
     {
         return status;
     }
-
-    return status;
-}
-
-static TRANSACTION_STATUS_E runSystemDiagnostics(telemetryTaskData_S *taskData)
-{
-    // Create and clear pack monitor data buffer
-    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
-    memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
-
-    // Create and clear cell monitor data buffer
-    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-    memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
-
-    // ISOSPI status variable
-    TRANSACTION_STATUS_E status;
-
-    // Read status register group C
-    status = readChain(RDSTATC, &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    // Extract the sleep bit from each data packet, and check if it is set
-    if((packMonitorDataBuffer[REGISTER_BYTE5]) & STATC_SLEEP_BIT)
-    {
-        return TRANSACTION_POR_ERROR;
-    }
-
-    // Check for the sleep bit to detect a power reset
-    for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
-    {
-        // Extract the sleep bit from each data packet, and check if it is set
-        uint8_t statC5 = cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + REGISTER_BYTE5];
-        if(statC5 & STATC_SLEEP_BIT)
-        {
-            return TRANSACTION_POR_ERROR;
-        }
-    }
-
-    uint32_t countMSB = (packMonitorDataBuffer[REGISTER_BYTE2] & 0x1F);
-    uint32_t countLSB = packMonitorDataBuffer[REGISTER_BYTE3];
-    uint32_t I1CNTPHA = (countMSB << BITS_IN_BYTE) | countLSB;
-
-    if(I1CNTPHA < taskData->packMonitorData.lastPhaseCount)
-    {
-        taskData->packMonitorData.adcPhaseCounter += (I1CNTPHA + (8192 - taskData->packMonitorData.lastPhaseCount));
-    }
-    else
-    {
-        taskData->packMonitorData.adcPhaseCounter += (I1CNTPHA - taskData->packMonitorData.lastPhaseCount);
-    }
-    taskData->packMonitorData.lastPhaseCount = I1CNTPHA;
 
     return status;
 }
@@ -330,31 +287,47 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
         return status;
     }
 
-    // Swap BMB MUX state
+    updateTimer(&taskData->packMonitorData.localPhaseCountTimer);
 
-    // Fill tx buffer with proper GPIO config bit to swap mux state
-    packMonitorDataBuffer[REGISTER_BYTE3] = ALL_PACK_MON_GPIO;
-    packMonitorDataBuffer[REGISTER_BYTE4] = ALL_PACK_MON_GPIO;
-    packMonitorDataBuffer[REGISTER_BYTE5] = ACCI_24;
+    // Read status register group C
+    status = readChain(RDSTATC, &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
+    // Extract the sleep bit from each data packet, and check if it is set
+    if((packMonitorDataBuffer[REGISTER_BYTE5]) & STATC_SLEEP_BIT)
+    {
+        return TRANSACTION_POR_ERROR;
+    }
+
+    // Check for the sleep bit to detect a power reset
     for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
-        cellMonitorDataBuffer[REGISTER_BYTE3] = ALL_CELL_MON_GPIO;
-        cellMonitorDataBuffer[REGISTER_BYTE4] = GPIO9;
+        // Extract the sleep bit from each data packet, and check if it is set
+        uint8_t statC5 = cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + REGISTER_BYTE5];
+        if(statC5 & STATC_SLEEP_BIT)
+        {
+            return TRANSACTION_POR_ERROR;
+        }
     }
 
-    status = writeChain(WRCFGA, &taskData->chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
+    uint16_t phaseCounterMSB = (packMonitorDataBuffer[REGISTER_BYTE2] & 0x1F);
+    uint16_t phaseCounterLSB = packMonitorDataBuffer[REGISTER_BYTE3];
+    uint16_t phaseCounter = (phaseCounterMSB << BITS_IN_BYTE) | phaseCounterLSB;
 
-    // Verify command counter
-    status = readChain(RDSID, &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    if(phaseCounter < taskData->packMonitorData.lastPhaseCount)
     {
-        return status;
+        taskData->packMonitorData.adcConversionPhaseCounter += (phaseCounter + (MAX_13BIT_UINT - taskData->packMonitorData.lastPhaseCount) + 1);
     }
+    else
+    {
+        taskData->packMonitorData.adcConversionPhaseCounter += (phaseCounter - taskData->packMonitorData.lastPhaseCount);
+    }
+    taskData->packMonitorData.lastPhaseCount = phaseCounter;
+
+    taskData->packMonitorData.adcConversionTimeMS = ((float)(taskData->packMonitorData.localPhaseCountTimer.timCount * PHASE_COUNTS_PER_MS) / (taskData->packMonitorData.adcConversionPhaseCounter));
 
     return status;
 }
@@ -374,7 +347,7 @@ static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData)
     // Read cell voltage registers A-E, and populate cell voltages to data struct
     for(uint32_t i = 0; i < NUM_CELLV_REGISTERS; i++)
     {
-        status = readChain(readVoltReg[i], &taskData->chainInfo, packMonitorDataBuffer[i], cellMonitorDataBuffer);
+        status = readChain(readFiltVoltReg[i], &taskData->chainInfo, packMonitorDataBuffer[i], cellMonitorDataBuffer);
         if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
         {
             return status;
@@ -385,12 +358,12 @@ static TRANSACTION_STATUS_E updateCellVoltages(telemetryTaskData_S *taskData)
     }
 
     // Extract IADC1 and IADC2 data from current sense ADCs
-    taskData->IADC1 = CONVERT_IADC1(packMonitorDataBuffer[0]);
-    taskData->IADC2 = CONVERT_IADC2((packMonitorDataBuffer[0] + ENERGY_DATA_SIZE));
+    taskData->IADC1 = (float)CONVERT_IADC1(packMonitorDataBuffer[0]) / taskData->packMonitorData.shuntResistanceMicroOhms;
+    taskData->IADC2 = (float)CONVERT_IADC2((packMonitorDataBuffer[0] + ENERGY_DATA_SIZE)) / taskData->packMonitorData.shuntResistanceMicroOhms;
 
     // Extract VBADC1 and VBADC2 data from battery voltage ADCs
-    taskData->VBADC1 = CONVERT_VBADC1((packMonitorDataBuffer[1] + VBATT_DATA_SIZE));
-    taskData->VBADC2 = CONVERT_VBADC2((packMonitorDataBuffer[1] + (2 * VBATT_DATA_SIZE)));
+    taskData->VBADC1 = (float)CONVERT_VBADC1((packMonitorDataBuffer[1] + VBATT_DATA_SIZE));
+    taskData->VBADC2 = (float)CONVERT_VBADC2((packMonitorDataBuffer[1] + (2 * VBATT_DATA_SIZE)));
 
     return status;
 }
@@ -426,8 +399,8 @@ static TRANSACTION_STATUS_E updateDiagnosticCellVoltages(telemetryTaskData_S *ta
 static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
 {
     // Create and clear pack monitor data buffer
-    uint8_t packMonitorDataBuffer[NUM_CELLV_REGISTERS][REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
-    memset(packMonitorDataBuffer, 0, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
+    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
     // Create and clear cell monitor data buffer
     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
@@ -438,7 +411,7 @@ static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
     // Read aux voltage registers A-C, and populate cell temps to data struct
     for(uint32_t i = 0; i < NUM_AUXV_REGISTERS; i++)
     {
-        status = readChain(readAuxReg[i], &taskData->chainInfo, packMonitorDataBuffer[i], cellMonitorDataBuffer);
+        status = readChain(readAuxReg[i], &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
         if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
         {
             return status;
@@ -451,10 +424,6 @@ static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
         convertCellTempRegister(cellMonitorDataBuffer, cellStartIndex, taskData->bmb);
     }
 
-    // Cycle mux state
-    taskData->muxState++;
-    taskData->muxState %= NUM_MUX_STATES;
-
     for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
     {
         float adcVoltage = CONVERT_VADC((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (2 * CELL_REG_SIZE)));
@@ -462,12 +431,75 @@ static TRANSACTION_STATUS_E updateCellTemps(telemetryTaskData_S *taskData)
         taskData->bmb[bmbOrder[i]].boardTempStatus = GOOD;
     }
 
+    // Cycle mux state
+    taskData->muxState++;
+    taskData->muxState %= NUM_MUX_STATES;
+
+    // Fill tx buffer with proper GPIO config bit to swap mux state
+    packMonitorDataBuffer[REGISTER_BYTE3] = ALL_PACK_MON_GPIO;
+    packMonitorDataBuffer[REGISTER_BYTE4] = ALL_PACK_MON_GPIO;
+    packMonitorDataBuffer[REGISTER_BYTE5] = ACCN_CTRL_BITS;
+
+    for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+    {
+        cellMonitorDataBuffer[REGISTER_BYTE3] = ALL_CELL_MON_GPIO;
+        cellMonitorDataBuffer[REGISTER_BYTE4] = GPIO9 | ((uint8_t)taskData->muxState << 1);
+        cellMonitorDataBuffer[REGISTER_BYTE5] = CADC_FILTER_CUTOFF_21HZ;
+    }
+
+    status = writeChain(WRCFGA, &taskData->chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    // Verify command counter
+    status = readChain(RDSID, &taskData->chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
     return status;
 }
 
 static TRANSACTION_STATUS_E updateEnergyData(telemetryTaskData_S *taskData)
 {
+    // Create and clear pack monitor data buffer
+    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR];
+    memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
+    // ISOSPI status variable
+    TRANSACTION_STATUS_E status;
+
+    if(taskData->packMonitorData.adcConversionPhaseCounter >= taskData->packMonitorData.nextGoodAccumulationDataPhaseCount)
+    {
+        taskData->packMonitorData.nextGoodAccumulationDataPhaseCount += (ACCUMULATION_REGISTER_COUNT * PHASE_COUNTS_PER_MS);
+
+        status = readPackMonitor(RDACC, &taskData->chainInfo, packMonitorDataBuffer);
+        if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            return status;
+        }
+
+        float accumulatedCurrent = (float)CONVERT_IADC1(packMonitorDataBuffer) / taskData->packMonitorData.shuntResistanceMicroOhms;
+        float accumulatedVoltage = (float)CONVERT_VBADC1((packMonitorDataBuffer + ENERGY_DATA_SIZE));
+
+        taskData->socData.milliCoulombCounter += (int32_t)(accumulatedCurrent * taskData->packMonitorData.adcConversionTimeMS);
+        // taskData->socData.milliJouleCounter += (uint32_t)(accumulatedCurrent * accumulatedVoltage * taskData->packMonitorData.adcConversionTimeMS);
+
+        if(fabs(accumulatedCurrent) > 1.0f)
+        {
+            clearTimer(&taskData->socData.socByOcvQualificationTimer);
+        }
+        else
+        {
+            updateTimer(&taskData->socData.socByOcvQualificationTimer);
+        }
+    }
+
+
+    return status;
 }
 
 static TRANSACTION_STATUS_E runAdcDiagnostics(telemetryTaskData_S *taskData)
@@ -763,9 +795,11 @@ void initTelemetryTask()
     };
 
     Soc_S defaultSocInfo = {
+        .socByOcvQualificationTimer = (Timer_S){.timCount = CELL_POLARIZATION_REST_MS, .lastUpdate = 0, .timThreshold = CELL_POLARIZATION_REST_MS},
         .packMilliCoulombs = PACK_MILLICOULOMBS,
         .milliCoulombCounter = 0,
-        .socByOcvQualificationTimer = (Timer_S){.timCount = CELL_POLARIZATION_REST_MS, .lastUpdate = 0, .timThreshold = CELL_POLARIZATION_REST_MS},
+        .packMilliJoules = PACK_MILLIJOULES,
+        .milliJouleCounter = 0,
         .socByOcv = 0.0f,
         .soeByOcv = 0.0f,
         .socByCoulombCounting = 0.0f,
@@ -775,7 +809,8 @@ void initTelemetryTask()
     vTaskSuspendAll();
     telemetryTaskData.chainInfo = defaultChainInfo;
     telemetryTaskData.socData = defaultSocInfo;
-    telemetryTaskData.packMonitorData.localPhaseTimer.timThreshold = UINT32_MAX;
+    telemetryTaskData.packMonitorData.localPhaseCountTimer.timThreshold = UINT32_MAX;
+    telemetryTaskData.packMonitorData.shuntResistanceMicroOhms = SHUNT_RESISTOR_REFERENCE_UV;
     xTaskResumeAll();
 }
 
@@ -812,12 +847,6 @@ void runTelemetryTask()
             telemetryStatus = runCommandBlock(startNewReadCycle, &telemetryTaskDataLocal);
         }
 
-        // Run system diagnostics
-        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        {
-            telemetryStatus = runCommandBlock(runSystemDiagnostics, &telemetryTaskDataLocal);
-        }
-
         // Read in cell voltages
         if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         {
@@ -828,18 +857,19 @@ void runTelemetryTask()
         if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         {
             telemetryStatus = runCommandBlock(updateCellTemps, &telemetryTaskDataLocal);
+            updatePackStatistics(&telemetryTaskDataLocal);
+        }
+
+        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            telemetryStatus = runCommandBlock(updateEnergyData, &telemetryTaskDataLocal);
+            updateSocSoe(&telemetryTaskDataLocal.socData, telemetryTaskDataLocal.minCellVoltage);
         }
 
         // Read in adc diagnostics
         if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         {
             telemetryStatus = runCommandBlock(runAdcDiagnostics, &telemetryTaskDataLocal);
-        }
-
-        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        {
-            updatePackStatistics(&telemetryTaskDataLocal);
-            updateSocSoe(&telemetryTaskDataLocal.socData, &socByOcvTable, &soeFromSocTable, telemetryTaskDataLocal.minCellVoltage, 0);
         }
     }
 
