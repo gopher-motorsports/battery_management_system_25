@@ -198,8 +198,15 @@ void runPrintTask()
     printf("\n");
     printf("SOC by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.socByOcv * 100.0f);
     printf("SOE by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.soeByOcv * 100.0f);
+    printf("\n");
+    printf("Millicoulomb Counter: %lu\n", printTaskInputData.telemetryTaskData.socData.milliCoulombCounter);
     printf("SOC by CC: %f\n", printTaskInputData.telemetryTaskData.socData.socByCoulombCounting * 100.0f);
     printf("SOE by CC: %f\n", printTaskInputData.telemetryTaskData.socData.soeByCoulombCounting * 100.0f);
+
+    // printf("\n");
+    // printf("Conversion Phase Counter: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.localPhaseCountTimer.timCount * 4);
+    // printf("ICNTPHA: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionPhaseCounter);
+    // printf("IADC Conversion Time: %f\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionTimeMS);
 
     // printf("\n");
     // printf("Diagnostic state: ");

@@ -998,10 +998,10 @@ TRANSACTION_STATUS_E readChain(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_
  * @param txData Byte array of data to write to the pack monitor
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *txData)
+TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, COMMAND_TYPE_E commandType, uint8_t *packMonitorData)
 {
     // Perform a write register on the pack monitor port and for only 1 device
-    TRANSACTION_STATUS_E status = writeRegister(command, 1, txData, chainInfo->packMonitorPort);
+    TRANSACTION_STATUS_E status = writeRegister(command, 1, packMonitorData, chainInfo->packMonitorPort);
 
     // Increment command counter
     incCommandCounter(commandType, chainInfo->localCommandCounter);
@@ -1017,10 +1017,10 @@ TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo,
  * @param rxData Byte array of data to populate with data from the pack monitor
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E readPackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *rxData)
+TRANSACTION_STATUS_E readPackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *packMonitorData)
 {
     // Perform a read register on the pack monitor port and for only 1 device
-    TRANSACTION_STATUS_E status = readRegister(command, 1, rxData, chainInfo->packMonitorPort, chainInfo->localCommandCounter, 0);
+    TRANSACTION_STATUS_E status = readRegister(command, 1, packMonitorData, chainInfo->packMonitorPort, chainInfo->localCommandCounter, 0);
 
     // If a command counter or power on reset error was returned, reset the command counter
     if(status == TRANSACTION_COMMAND_COUNTER_ERROR || status == TRANSACTION_POR_ERROR)
