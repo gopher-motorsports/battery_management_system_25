@@ -1,5 +1,5 @@
-#ifndef INC_ADBMS_H_
-#define INC_ADBMS_H_
+#ifndef INC_ISOSPI_H_
+#define INC_ISOSPI_H_
 
 /* ==================================================================== */
 /* ============================= INCLUDES ============================= */
@@ -429,4 +429,4 @@ TRANSACTION_STATUS_E writePackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo,
  */
 TRANSACTION_STATUS_E readPackMonitor(uint16_t command, CHAIN_INFO_S *chainInfo, uint8_t *packMonitorData);
 
-#endif /* INC_ADBMS_H_ */
+#endif /* INC_ISOSPI_H_ */
