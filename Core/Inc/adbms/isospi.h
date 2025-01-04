@@ -26,27 +26,27 @@
 #define COMMAND_SIZE_BYTES       2
 #define REGISTER_SIZE_BYTES      6
 
-#define CELLS_PER_REG       3
-#define CELL_REG_SIZE       (REGISTER_SIZE_BYTES / CELLS_PER_REG)
+// #define CELLS_PER_REG       3
+// #define CELL_REG_SIZE       (REGISTER_SIZE_BYTES / CELLS_PER_REG)
 
-#define VBATT_DATA_PER_REG  3
-#define VBATT_DATA_SIZE     (REGISTER_SIZE_BYTES / VBATT_DATA_PER_REG)
+// #define VBATT_DATA_PER_REG  3
+// #define VBATT_DATA_SIZE     (REGISTER_SIZE_BYTES / VBATT_DATA_PER_REG)
 
-#define ENERGY_DATA_PER_REG 2
-#define ENERGY_DATA_SIZE    (REGISTER_SIZE_BYTES / ENERGY_DATA_PER_REG)
+// #define ENERGY_DATA_PER_REG 2
+// #define ENERGY_DATA_SIZE    (REGISTER_SIZE_BYTES / ENERGY_DATA_PER_REG)
 
-#define VADC_GAIN           0.00015f
-#define VADC_OFFSET         1.5f
+// #define VADC_GAIN           0.00015f
+// #define VADC_OFFSET         1.5f
 
-#define IADC_GAIN           0.000001f
-#define VBADC1_GAIN         0.0001f
-#define VBADC2_GAIN         0.000085f
+// #define IADC_GAIN           0.000001f
+// #define VBADC1_GAIN         0.0001f
+// #define VBADC2_GAIN         0.000085f
 
-#define NUM_CELLV_REGISTERS 6
-#define NUM_AUXV_REGISTERS  3
+// #define NUM_CELLV_REGISTERS 6
+// #define NUM_AUXV_REGISTERS  3
 
-#define MAX_CELLV_SENSOR_VALUE  6.41505f
-#define MIN_CELLV_SENSOR_VALUE  -3.4152f
+// #define MAX_CELLV_SENSOR_VALUE  6.41505f
+// #define MIN_CELLV_SENSOR_VALUE  -3.4152f
 
 /* ADBMS Register addresses */
 

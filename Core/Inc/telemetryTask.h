@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 #include "adbms/isospi.h"
+#include "adbms/adbms.h"
 #include "soc.h"
 
 /* ==================================================================== */
@@ -29,8 +30,6 @@
 // #define BMB5_SEGMENT_INDEX  5
 // #define BMB6_SEGMENT_INDEX  6
 // #define BMB7_SEGMENT_INDEX  7
-
-#define NUM_CELLS_PER_BMB           16
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -65,14 +64,14 @@ typedef enum
 
 typedef struct
 {
-    float cellVoltage[NUM_CELLS_PER_BMB];
-    SENSOR_STATUS_E cellVoltageStatus[NUM_CELLS_PER_BMB];
+    float cellVoltage[NUM_CELLS_PER_CELL_MONITOR];
+    SENSOR_STATUS_E cellVoltageStatus[NUM_CELLS_PER_CELL_MONITOR];
 
-    float diagnosticCellVoltage[NUM_CELLS_PER_BMB];
-    SENSOR_STATUS_E diagnosticCellVoltageStatus[NUM_CELLS_PER_BMB];
+    float diagnosticCellVoltage[NUM_CELLS_PER_CELL_MONITOR];
+    SENSOR_STATUS_E diagnosticCellVoltageStatus[NUM_CELLS_PER_CELL_MONITOR];
 
-    float cellTemp[NUM_CELLS_PER_BMB];
-    SENSOR_STATUS_E cellTempStatus[NUM_CELLS_PER_BMB];
+    float cellTemp[NUM_CELLS_PER_CELL_MONITOR];
+    SENSOR_STATUS_E cellTempStatus[NUM_CELLS_PER_CELL_MONITOR];
 
     float maxCellVoltage;
     float minCellVoltage;
