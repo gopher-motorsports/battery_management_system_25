@@ -38,7 +38,7 @@ static void printCellVoltages(Bmb_S* bmb)
         printf("    %02ld     |", i);
     }
     printf("\n");
-    for(int32_t i = 0; i < NUM_CELLS_PER_BMB; i++)
+    for(int32_t i = 0; i < NUM_CELLS_PER_CELL_MONITOR; i++)
     {
         printf("|    %02ld    |", i+1);
         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
@@ -73,7 +73,7 @@ static void printCellTemps(Bmb_S* bmb)
         printf("     %02ld    |", i);
     }
     printf("\n");
-    for(int32_t i = 0; i < NUM_CELLS_PER_BMB; i++)
+    for(int32_t i = 0; i < NUM_CELLS_PER_CELL_MONITOR; i++)
     {
         printf("|    %02ld    |", i+1);
         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)

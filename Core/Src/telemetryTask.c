@@ -118,9 +118,9 @@ static void updatePackStatistics(telemetryTaskData_S *taskData);
 static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray, bool diagnosticAdc)
 {
     int32_t cellsInReg = CELLS_PER_REG;
-    if((NUM_CELLS_PER_BMB - cellStartIndex) < CELLS_PER_REG)
+    if((NUM_CELLS_PER_CELL_MONITOR - cellStartIndex) < CELLS_PER_REG)
     {
-        cellsInReg = NUM_CELLS_PER_BMB - cellStartIndex;
+        cellsInReg = NUM_CELLS_PER_CELL_MONITOR - cellStartIndex;
     }
 
     for(int32_t i = 0; i < cellsInReg; i++)
@@ -145,9 +145,9 @@ static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex
 static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray)
 {
     int32_t cellsInReg = CELLS_PER_REG;
-    if((NUM_CELLS_PER_BMB - cellStartIndex + 1) < (CELLS_PER_REG * 2))
+    if((NUM_CELLS_PER_CELL_MONITOR - cellStartIndex + 1) < (CELLS_PER_REG * 2))
     {
-        cellsInReg = (int32_t)((NUM_CELLS_PER_BMB - cellStartIndex + 1) / 2);
+        cellsInReg = (int32_t)((NUM_CELLS_PER_CELL_MONITOR - cellStartIndex + 1) / 2);
     }
 
     for(int32_t i = 0; i < cellsInReg; i++)
@@ -616,7 +616,7 @@ static void updateBmbStatistics(Bmb_S *bmb)
 		uint32_t numGoodCellTemp = 0;
 
 		// Aggregate Cell voltage and temperature data
-		for(uint32_t j = 0; j < NUM_CELLS_PER_BMB; j++)
+		for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
 		{
 			// Only update stats if sense status is good
 			if(pBmb->cellVoltageStatus[j] == GOOD)
@@ -661,7 +661,7 @@ static void updateBmbStatistics(Bmb_S *bmb)
             pBmb->minCellVoltage = minCellVoltage;
             pBmb->sumCellVoltage = sumVoltage;
             pBmb->avgCellVoltage = (sumVoltage / numGoodCellVoltage);
-            pBmb->numBadCellVoltage = NUM_CELLS_PER_BMB - numGoodCellVoltage;
+            pBmb->numBadCellVoltage = NUM_CELLS_PER_CELL_MONITOR - numGoodCellVoltage;
         }
 
         if(numGoodCellVoltage > 0)
@@ -669,7 +669,7 @@ static void updateBmbStatistics(Bmb_S *bmb)
             pBmb->maxCellTemp = maxCellTemp;
             pBmb->minCellTemp = minCellTemp;
             pBmb->avgCellTemp = (sumCellTemp / numGoodCellTemp);
-            pBmb->numBadCellTemp = NUM_CELLS_PER_BMB - numGoodCellTemp;
+            pBmb->numBadCellTemp = NUM_CELLS_PER_CELL_MONITOR - numGoodCellTemp;
         }
 	}
 }
@@ -699,7 +699,7 @@ static void updatePackStatistics(telemetryTaskData_S *taskData)
 	{
 		Bmb_S* pBmb = &taskData->bmb[i];
 
-        if(pBmb->numBadCellVoltage != NUM_CELLS_PER_BMB)
+        if(pBmb->numBadCellVoltage != NUM_CELLS_PER_CELL_MONITOR)
         {
             if(pBmb->maxCellVoltage > maxCellVoltage)
             {
@@ -715,7 +715,7 @@ static void updatePackStatistics(telemetryTaskData_S *taskData)
             sumVoltage += pBmb->sumCellVoltage;
         }
 
-        if(pBmb->numBadCellTemp != NUM_CELLS_PER_BMB)
+        if(pBmb->numBadCellTemp != NUM_CELLS_PER_CELL_MONITOR)
         {
             if (pBmb->maxCellTemp > maxCellTemp)
             {
