@@ -253,15 +253,6 @@
 // Status register C sleep bit
 #define STATC_SLEEP_BIT 0x08
 
-#define ACCI_4 0x0
-#define ACCI_8 0x1
-#define ACCI_12 0x2
-#define ACCI_16 0x3
-#define ACCI_20 0x4
-#define ACCI_24 0x5
-#define ACCI_28 0x6
-#define ACCI_32 0x7
-
 #define IADC_QUALIFICATION_TIME_MS          132
 #define ACCUMULATION_REGISTER_COUNT         24
 #define ACCN_CTRL_BITS                      ((uint8_t)(ACCUMULATION_REGISTER_COUNT / 4) - 1)
