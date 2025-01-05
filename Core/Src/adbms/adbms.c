@@ -299,105 +299,14 @@ TRANSACTION_STATUS_E writeNVM(CHAIN_INFO_S *chainInfo, uint8_t *writeData)
     return writeChain(WRRR, chainInfo, CELL_MONITOR_COMMAND, packMonitorDataBuffer, writeData);
 }
 
-TRANSACTION_STATUS_E writeConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigACellMonitor *cellMonitorConfigA, ADBMS_ConfigAPackMonitor *packMonitorConfigA)
+TRANSACTION_STATUS_E writeConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA)
 {
-    uint32_t numCellMonitors = (chainInfo->numDevs - 1);
-
-    // Create and clear pack monitor data buffer
-    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES];
-    memset(packMonitorDataBuffer, 0x00, REGISTER_SIZE_BYTES);
-
-    // Create and clear cell monitor data buffer
-    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * numCellMonitors];
-    memset(cellMonitorDataBuffer, 0x00, REGISTER_SIZE_BYTES * numCellMonitors);
-
-    for(uint32_t i = 0; i < numCellMonitors; i++)
-    {
-        uint8_t configRegister[REGISTER_SIZE_BYTES];
-        memset(configRegister, 0x00, REGISTER_SIZE_BYTES);
-
-        // CFGAR0
-        configRegister[REGISTER_BYTE0] |= (((uint8_t)cellMonitorConfigA[i].referenceOn) << REFON_BIT);
-        configRegister[REGISTER_BYTE0] |= ((uint8_t)cellMonitorConfigA[i].comparisonThreshold);
-
-        //CFGAR1
-        // TODO: Are flag bits readable?
-
-        // CFGAR2
-        configRegister[REGISTER_BYTE2] |= (((uint8_t)cellMonitorConfigA[i].soakEnabled) << SOAKON_BIT);
-        configRegister[REGISTER_BYTE2] |= (((uint8_t)cellMonitorConfigA[i].soakTime) << SOAK_TIME_BIT);
-
-        // CFGAR3
-        for(uint32_t j = 0; j < BITS_IN_BYTE; i++)
-        {
-            configRegister[REGISTER_BYTE3] |= (((uint8_t)(!cellMonitorConfigA[i].gpoPullDownEnabled[j])) << j);
-        }
-
-        // CFGAR4
-        configRegister[REGISTER_BYTE4] |= ((uint8_t)(!cellMonitorConfigA[i].gpoPullDownEnabled[8]));
-        configRegister[REGISTER_BYTE4] |= (((uint8_t)(!cellMonitorConfigA[i].gpoPullDownEnabled[9])) << GPO10_BIT);
-
-        // CFGAR5
-        configRegister[REGISTER_BYTE5] |= (((uint8_t)cellMonitorConfigA[i].snapStatus) << SNAP_ST_BIT);
-        configRegister[REGISTER_BYTE5] |= (((uint8_t)cellMonitorConfigA[i].muteStatus) << MUTE_ST_BIT);
-        configRegister[REGISTER_BYTE5] |= (((uint8_t)cellMonitorConfigA[i].commBreak) << COMM_BK_BIT);
-        configRegister[REGISTER_BYTE5] |= ((uint8_t)cellMonitorConfigA[i].digitalFilterSetting);
-
-        memcpy((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), configRegister, REGISTER_SIZE_BYTES);
-    }
-
-    return writeChain(WRCFGA, chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
+    return writeChain(WRCFGA, chainInfo, SHARED_COMMAND, (uint8_t*)packMonitorConfigA, (uint8_t*)cellMonitorConfigA);
 }
 
-TRANSACTION_STATUS_E readConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigACellMonitor *cellMonitorConfigA, ADBMS_ConfigAPackMonitor *packMonitorConfigA)
+TRANSACTION_STATUS_E readConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA)
 {
-    TRANSACTION_STATUS_E status;
-    uint32_t numCellMonitors = (chainInfo->numDevs - 1);
-
-    // Create and clear pack monitor data buffer
-    uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES];
-    memset(packMonitorDataBuffer, 0x00, REGISTER_SIZE_BYTES);
-
-    // Create and clear cell monitor data buffer
-    uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * numCellMonitors];
-    memset(cellMonitorDataBuffer, 0x00, REGISTER_SIZE_BYTES * numCellMonitors);
-
-    status = readChain(RDCFGA, chainInfo, packMonitorDataBuffer, cellMonitorDataBuffer);
-
-    for(uint32_t i = 0; i < numCellMonitors; i++)
-    {
-        uint8_t configRegister[REGISTER_SIZE_BYTES];
-        memcpy(configRegister, (cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), REGISTER_SIZE_BYTES);
-
-        // CFGAR0
-        cellMonitorConfigA[i].referenceOn = (bool)(configRegister[REGISTER_BYTE0] >> REFON_BIT);
-        cellMonitorConfigA[i].comparisonThreshold = (COMPARISON_THRESHOLD_E)(configRegister[REGISTER_BYTE0] & CTH_MASK);
-
-        //CFGAR1
-        // TODO: Are flag bits readable?
-
-        // CFGAR2
-        cellMonitorConfigA[i].soakEnabled = (bool)(configRegister[REGISTER_BYTE2] >> SOAKON_BIT);
-        cellMonitorConfigA[i].soakTime = (AUX_SOAK_TIME_E)((configRegister[REGISTER_BYTE2] >> SOAK_TIME_BIT) & SOAK_TIME_MASK);
-
-        // CFGAR3
-        for(uint32_t j = 0; j < BITS_IN_BYTE; i++)
-        {
-            cellMonitorConfigA[i].gpoPullDownEnabled[j] = !(bool)((configRegister[REGISTER_BYTE3] >> (j)) & 0x01);
-        }
-
-        // CFGAR4
-        cellMonitorConfigA[i].gpoPullDownEnabled[8] = !(bool)((configRegister[REGISTER_BYTE4]) & 0x01);
-        cellMonitorConfigA[i].gpoPullDownEnabled[9] = !(bool)((configRegister[REGISTER_BYTE4] >> GPO10_BIT) & 0x01);
-
-        // CFGAR5
-        cellMonitorConfigA[i].snapStatus = (bool)((configRegister[REGISTER_BYTE5] >> SNAP_ST_BIT) & 0x01);
-        cellMonitorConfigA[i].muteStatus = (bool)((configRegister[REGISTER_BYTE5] >> MUTE_ST_BIT) & 0x01);
-        cellMonitorConfigA[i].commBreak = (bool)((configRegister[REGISTER_BYTE5] >> COMM_BK_BIT) & 0x01);
-        cellMonitorConfigA[i].digitalFilterSetting = (DIGITAL_FILTER_SETTING_E)(configRegister[REGISTER_BYTE5] & FC_MASK);
-    }
-
-    return status;
+    return readChain(RDCFGA, chainInfo, (uint8_t*)packMonitorConfigA, (uint8_t*)cellMonitorConfigA);
 }
 
 TRANSACTION_STATUS_E readCellVoltages(CHAIN_INFO_S *chainInfo, float **cellVoltageArr, CELL_VOLTAGE_TYPE_E cellVoltageType)
