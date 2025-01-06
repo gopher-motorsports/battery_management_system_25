@@ -17,6 +17,9 @@
 #define NUM_PACK_MONITOR_GPIO       4
 #define NUM_PACK_MONITOR_GPO        6
 
+#define NUM_PACK_VOLTAGES           10
+#define NUM_REDUNDANT_PACK_VOLTAGES 6
+
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
 /* ==================================================================== */
@@ -218,6 +221,8 @@ typedef enum
 /* ============================== STRUCTS============================== */
 /* ==================================================================== */
 
+// Start Cell Monitor Structure
+
 typedef struct __attribute__((packed))
 {
     // Byte 0
@@ -261,8 +266,127 @@ typedef struct __attribute__((packed))
     uint8_t muteStatus : 1;
     uint8_t snapStatus : 1;
     uint8_t reserved4 : 2;
-    
+
 } ADBMS_ConfigACellMonitor;
+
+typedef struct __attribute__((packed))
+{
+    float undervoltageThreshold;
+    float overvoltageThreshold;
+    uint32_t dischargeTimeoutMinutes;
+    bool dischargeCell[NUM_CELLS_PER_CELL_MONITOR];
+} ADBMS_ConfigBCellMonitor;
+
+typedef struct __attribute__((packed))
+{
+    float referenceVoltage;
+    float dieTemp;
+} ADBMS_StatusACellMonitor;
+
+typedef struct __attribute__((packed))
+{
+    float digitalSupplyVoltage;
+    float analogSupplyVoltage;
+    float referenceResistorVoltage;
+} ADBMS_StatusBCellMonitor;
+
+typedef struct __attribute__((packed))
+{
+    uint16_t adcMismatchFlags;
+    uint16_t conversionCounter;
+
+    uint8_t redundantAdcMultipleTrimError : 1;
+    uint8_t redundantAdcTrimError : 1;
+    uint8_t primaryAdcMultipleTrimError : 1;
+    uint8_t primaryAdcTrimError : 1;
+    uint8_t digitalUnderVoltage : 1;
+    uint8_t digitalOverVoltage : 1;
+    uint8_t analogUnderVoltage : 1;
+    uint8_t analogOverVoltage : 1;
+
+    uint8_t oscillatorFault : 1;
+    uint8_t testModeDetected : 1;
+    uint8_t thermalShutdownDetected : 1;
+    uint8_t sleepDetected : 1;
+    uint8_t spiFault : 1;
+    uint8_t adcComparisonActive : 1;
+    uint8_t supplyRailDeltaFault : 1;
+    uint8_t supplyRailDeltaFaultLatching : 1;
+} ADBMS_StatusCCellMonitor;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t cell1UnderVoltage : 1;
+    uint8_t cell1OverVoltage : 1;
+    uint8_t cell2UnderVoltage : 1;
+    uint8_t cell2OverVoltage : 1;
+    uint8_t cell3UnderVoltage : 1;
+    uint8_t cell3OverVoltage : 1;
+    uint8_t cell4UnderVoltage : 1;
+    uint8_t cell4OverVoltage : 1;
+
+    uint8_t cell5UnderVoltage : 1;
+    uint8_t cell5OverVoltage : 1;
+    uint8_t cell6UnderVoltage : 1;
+    uint8_t cell6OverVoltage : 1;
+    uint8_t cell7UnderVoltage : 1;
+    uint8_t cell7OverVoltage : 1;
+    uint8_t cell8UnderVoltage : 1;
+    uint8_t cell8OverVoltage : 1;
+
+    uint8_t cell9UnderVoltage : 1;
+    uint8_t cell9OverVoltage : 1;
+    uint8_t cell10UnderVoltage : 1;
+    uint8_t cell10OverVoltage : 1;
+    uint8_t cell11UnderVoltage : 1;
+    uint8_t cell11OverVoltage : 1;
+    uint8_t cell12UnderVoltage : 1;
+    uint8_t cell12OverVoltage : 1;
+
+    uint8_t cell13UnderVoltage : 1;
+    uint8_t cell13OverVoltage : 1;
+    uint8_t cell14UnderVoltage : 1;
+    uint8_t cell14OverVoltage : 1;
+    uint8_t cell15UnderVoltage : 1;
+    uint8_t cell15OverVoltage : 1;
+    uint8_t cell16UnderVoltage : 1;
+    uint8_t cell16OverVoltage : 1;
+
+    uint8_t reserved1;
+
+    uint8_t oscillatorCounter;
+
+} ADBMS_StatusDCellMonitor;
+
+typedef struct __attribute__((packed))
+{
+    uint16_t gpiState;
+    uint16_t revisionCode
+} ADBMS_StatusECellMonitor;
+
+typedef struct __attribute__((packed))
+{
+    ADBMS_ConfigACellMonitor configGroupA;
+    ADBMS_ConfigBCellMonitor configGroupB;
+
+    ADBMS_StatusACellMonitor statusGroupA;
+    ADBMS_StatusBCellMonitor statusGroupB;
+    ADBMS_StatusCCellMonitor statusGroupC;
+    ADBMS_StatusDCellMonitor statusGroupD;
+    ADBMS_StatusECellMonitor statusGroupE;
+
+    float cellVoltage[NUM_CELLS_PER_CELL_MONITOR];
+    float auxVoltage[NUM_CELL_MONITOR_GPIO];
+
+    float hvSupplyVoltage;
+    float switch1Voltage;
+
+    uint8_t dischargePWM[NUM_CELLS_PER_CELL_MONITOR];
+
+    uint8_t serialIdGroup[REGISTER_SIZE_BYTES];
+    uint8_t retentionRegister[REGISTER_SIZE_BYTES];
+
+} ADBMS_CellMonitorData;
 
 typedef struct __attribute__((packed))
 {
@@ -321,151 +445,147 @@ typedef struct __attribute__((packed))
 
 typedef struct
 {
-    float undervoltageThreshold;
-    float overvoltageThreshold;
-    bool dischargeMonitorEnabled;
-    uint32_t dischargeTimeoutMinutes;
-    bool dischargeCell[NUM_CELLS_PER_CELL_MONITOR];
-} ADBMS_ConfigBCellMonitor;
-
-typedef struct
-{
     /* data */
 } ADBMS_ConfigBPackMonitor;
 
-typedef struct
+typedef struct __attribute__((packed))
 {
-    // Group A
-    float referenceVoltage;
-    float dieTemp;
-
-    // Group B
-    float digitalSupplyVoltage;
-    float analogSupplyVoltage;
-    float referenceResistorVoltage;
-
-    // Group C
-    uint16_t adcMismatchFlags;
-    bool analogUnderVoltage;
-    bool analogOverVoltage;
-    bool digitalUnderVoltage;
-    bool digitalOverVoltage;
-    bool primaryAdcTrimError;
-    bool primaryAdcMultipleTrimError;
-    bool redundantAdcTrimError;
-    bool redundantAdcMultipleTrimError;
-    bool supplyRailDeltaFault;
-    bool supplyRailDeltaFaultLatching;
-    bool adcComparisonActive;
-    bool spiFault;
-    bool sleepDetected;
-    bool thermalShutdownDetected;
-    bool testModeDetected;
-    bool oscillatorFault;
-    uint16_t conversionCounter;
-
-    // Group D
-    bool cellOvervoltage[NUM_CELLS_PER_CELL_MONITOR];
-    bool cellUndervoltage[NUM_CELLS_PER_CELL_MONITOR];
-    uint8_t oscillatorCounter;
-
-    // Group E
-    bool gpioLogicHigh[NUM_CELL_MONITOR_GPIO];
-    uint8_t deviceRevisionCode;
-
-} ADBMS_StatusGroupCellMonitor;
-
-typedef struct
-{
-    // Group A
     float regulatorVoltage;
     float dieTemp1;
     float referenceVoltage;
+} ADBMS_StatusAPackMonitor;
 
-    // Group B
+typedef struct __attribute__((packed))
+{
     float groundPadVoltage;
     float digitalSupplyVoltage;
     float supplyVoltage;
+} ADBMS_StatusBPackMonitor;
 
-    // Group C
-    bool overcurrent1Fault;
-    bool overcurrent2Fault;
-    bool overcurrent3Fault;
-    bool overcurrentReferenceFault;
-    bool overcurrentVoterAFault;
-    bool overcurrentVoterBFault;
-    bool overcurrentAGateDrainFault;
-    bool overcurrentBGateDrainFault;
-    bool overcurrentMismatchFault;
+typedef struct __attribute__((packed))
+{
+    uint8_t overcurrent1Fault : 1;
+    uint8_t overcurrentVoterAFault : 1;
+    uint8_t overcurrentAGateDrainFault : 1;
+    uint8_t overcurrent3Fault : 1;
+    uint8_t overcurrentMismatchFault : 1;
+    uint8_t driveUnderVoltage : 1;
+    uint8_t reserved1 : 2;
 
-    uint16_t conversionCounter1;
-    uint8_t conversionCounter2;
+    uint8_t overcurrent2Fault : 1;
+    uint8_t overcurrentVoterBFault : 1;
+    uint8_t overcurrentBGateDrainFault : 1;
+    uint8_t overcurrentReferenceFault : 1;
+    uint8_t oscillatorStuckFault : 1;
+    uint8_t supplyUnderVoltage : 1;
+    uint8_t reserved2 : 2;
 
-    bool primaryAdcTrimError;
-    bool redundantAdcTrimError;
-    bool primaryAdcMultipleTrimError;
-    bool redundantAdcMultipleTrimError;
-    bool regulatorUnderVoltage;
-    bool regulatorOverVoltage;
-    bool supplyUnderVoltage;
-    bool driveUnderVoltage;
-    bool digitalSupplyUnderVoltage;
-    bool digitalSupplyOverVoltage;
-    bool voltageDomainFault;
-    bool voltageDomainDiagnositcFault;
-    bool analogUnderVoltage;
-    bool analogOverVoltage;
-    bool oscillatorMismatchFault;
-    bool oscillatorStuckFault;
-    bool spiFault;
-    bool resetDetected;
-    bool thermalShutdownDetected;
-    bool testModeDetected;
+    uint16_t conversionCounter1 : 13;
+    uint16_t conversionCounter2 : 3;
 
-    // Group D
+    uint8_t redundantAdcMultipleTrimError : 1;
+    uint8_t redundantAdcTrimError : 1;
+    uint8_t primaryAdcMultipleTrimError : 1;
+    uint8_t primaryAdcTrimError : 1;
+    uint8_t digitalSupplyUnderVoltage : 1;
+    uint8_t digitalSupplyOverVoltage : 1;
+    uint8_t regulatorUnderVoltage : 1;
+    uint8_t regulatorOverVoltage : 1;
+
+    uint8_t oscillatorMismatchFault : 1;
+    uint8_t testModeDetected : 1;
+    uint8_t thermalShutdownDetected : 1;
+    uint8_t resetDetected : 1;
+    uint8_t spiFault : 1;
+    uint8_t voltageDomainFault : 1;
+    uint8_t voltageDomainDiagnositcFault : 1;
+} ADBMS_StatusCPackMonitor;
+
+typedef struct __attribute__((packed))
+{
     uint8_t oscillatorCounter;
     float dieTemp2;
     float referenceResistorVoltage;
 
-    // Group E
-    bool gpioLogicHigh[NUM_CELL_MONITOR_GPIO];
-    uint8_t deviceRevisionCode;
-    uint8_t deviceDerivativeCode;
-    bool overcurrentAPinHigh;
-    bool overcurrentBPinHigh;
-    bool currentAdc1Ready;
-    bool currentAdc2Ready;
-    bool gpioHigh[NUM_PACK_MONITOR_GPIO];
-    bool gpoLowLevelHigh[NUM_PACK_MONITOR_GPO];
-    bool gpoHighLevelHigh[NUM_PACK_MONITOR_GPO];
+} ADBMS_StatusDPackMonitor;
 
-} ADBMS_StatusGroupPackMonitor;
-
-typedef struct
+typedef struct __attribute__((packed))
 {
-    float packCurrent1;
-    float packCurrent2;
-    float packVoltage1;
-    float packVoltage2;
-    float currentAccumulator1;
-    float currentAccumulator2;
-    float voltageAccumulator1;
-    float voltageAccumulator2;
+    uint8_t overCurrentPinAState : 1;
+    uint8_t overCurrentPinBState : 1;
+    uint8_t reserved1 : 6;
 
-    float auxVoltage[10];
+    uint8_t derivativeCode : 2;
+    uint8_t reserved2 : 4;
+    uint8_t currentAdc1Initialized : 1;
+    uint8_t currentAdc2Initialized : 1;
 
+    uint8_t reserved3 : 8;
 
+    uint8_t gpo5LowLevelState : 1;
+    uint8_t gpo6LowLevelState : 1;
+    uint8_t gpo1HighLevelState : 1;
+    uint8_t gpo2HighLevelState : 1;
+    uint8_t gpo3HighLevelState : 1;
+    uint8_t gpo4HighLevelState : 1;
+    uint8_t gpo5HighLevelState : 1;
+    uint8_t gpo6HighLevelState : 1;
 
+    uint8_t gpio1State : 1;
+    uint8_t gpio2State : 1;
+    uint8_t gpio3State : 1;
+    uint8_t gpio4State : 1;
+    uint8_t gpo1LowLevelState : 1;
+    uint8_t gpo2LowLevelState : 1;
+    uint8_t gpo3LowLevelState : 1;
+    uint8_t gpo4LowLevelState : 1;
+
+    uint8_t reserved4 : 4;
+    uint8_t revisionCode : 4;
+
+} ADBMS_StatusEPackMonitor;
+
+typedef struct __attribute__((packed))
+{
+    ADBMS_ConfigAPackMonitor configGroupA;
+    ADBMS_ConfigBPackMonitor configGroupB;
+
+    ADBMS_StatusAPackMonitor statusGroupA;
+    ADBMS_StatusBPackMonitor statusGroupB;
+    ADBMS_StatusCPackMonitor statusGroupC;
+    ADBMS_StatusDPackMonitor statusGroupD;
+    ADBMS_StatusEPackMonitor statusGroupE;
+
+    uint32_t currentAdc1uV;
+    uint32_t currentAdc2uV;
+
+    float batteryVoltage1;
+    float batteryVoltage2;
+
+    uint32_t currentAdcAccumulator1uV;
+    uint32_t currentAdcAccumulator2uV;
+
+    uint32_t batteryVoltageAccumulator1;
+    uint32_t batteryVoltageAccumulator2;
+
+    float packVoltage[NUM_PACK_VOLTAGES];
+    float redundantPackVoltage[NUM_REDUNDANT_PACK_VOLTAGES];
+
+    float overCurrentAdc1;
+    float overCurrentAdc2;
+    float overCurrentAdc3;
+    float overCurrentMaxAdc3;
+    float overCurrentMinAdc3;
+
+    uint8_t serialIdGroup[REGISTER_SIZE_BYTES];
 } ADBMS_PackMonitorData;
 
-
-typedef struct
+typedef struct __attribute__((packed))
 {
-    float auxVoltage[NUM_CELL_MONITOR_GPIO];
-    float switchVoltage;
-    float supplyVoltage;
-} ADBMS_AuxVoltageGroup;
-
+    ADBMS_PackMonitorData packMonitor;
+    ADBMS_CellMonitorData cellMonitor[8];
+    CHAIN_INFO_S chainInfo;
+} ADBMS_BatteryData;
 
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
@@ -479,7 +599,7 @@ typedef struct
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startCellConversions(CHAIN_INFO_S *chainInfo, ADC_MODE_REDUNDANT_E redundantMode, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_FILTER_E filterMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startCellConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_REDUNDANT_E redundantMode, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_FILTER_E filterMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -487,7 +607,7 @@ TRANSACTION_STATUS_E startCellConversions(CHAIN_INFO_S *chainInfo, ADC_MODE_REDU
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startRedundantCellConversions(CHAIN_INFO_S *chainInfo, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startRedundantCellConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -495,7 +615,7 @@ TRANSACTION_STATUS_E startRedundantCellConversions(CHAIN_INFO_S *chainInfo, ADC_
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startAuxConversions(CHAIN_INFO_S *chainInfo, ADC_MODE_AUX_CHANNEL_E auxChannel, ADC_MODE_AUX_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startAuxConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel, ADC_MODE_AUX_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -503,7 +623,7 @@ TRANSACTION_STATUS_E startAuxConversions(CHAIN_INFO_S *chainInfo, ADC_MODE_AUX_C
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startRedundantAuxConversions(CHAIN_INFO_S *chainInfo, ADC_MODE_AUX_CHANNEL_E auxChannel);
+TRANSACTION_STATUS_E startRedundantAuxConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel);
 
 /**
  * @brief
@@ -511,7 +631,7 @@ TRANSACTION_STATUS_E startRedundantAuxConversions(CHAIN_INFO_S *chainInfo, ADC_M
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startPackVoltageConversions(CHAIN_INFO_S *chainInfo, ADC_MODE_PACK_CHANNEL_E packChannel, ADC_MODE_PACK_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startPackVoltageConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_PACK_CHANNEL_E packChannel, ADC_MODE_PACK_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -519,7 +639,7 @@ TRANSACTION_STATUS_E startPackVoltageConversions(CHAIN_INFO_S *chainInfo, ADC_MO
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startPackAuxillaryConversions(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E startPackAuxillaryConversions(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
@@ -527,7 +647,7 @@ TRANSACTION_STATUS_E startPackAuxillaryConversions(CHAIN_INFO_S *chainInfo);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E clearAllVoltageRegisters(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
@@ -535,7 +655,7 @@ TRANSACTION_STATUS_E clearAllVoltageRegisters(CHAIN_INFO_S *chainInfo);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E muteDischarge(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
@@ -543,7 +663,7 @@ TRANSACTION_STATUS_E muteDischarge(CHAIN_INFO_S *chainInfo);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E unmuteDischarge(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
@@ -551,7 +671,7 @@ TRANSACTION_STATUS_E unmuteDischarge(CHAIN_INFO_S *chainInfo);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E freezeRegisters(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
@@ -559,7 +679,7 @@ TRANSACTION_STATUS_E freezeRegisters(CHAIN_INFO_S *chainInfo);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E unfreezeRegisters(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
@@ -567,7 +687,7 @@ TRANSACTION_STATUS_E unfreezeRegisters(CHAIN_INFO_S *chainInfo);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E softReset(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E softReset(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
@@ -575,7 +695,7 @@ TRANSACTION_STATUS_E softReset(CHAIN_INFO_S *chainInfo);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E clearAllFlags(CHAIN_INFO_S *chainInfo);
+TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData * adbmsData);
 
 /**
  * @brief
