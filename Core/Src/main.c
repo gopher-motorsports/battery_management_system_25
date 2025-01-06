@@ -55,7 +55,7 @@ TIM_HandleTypeDef htim7;
 UART_HandleTypeDef huart2;
 
 osThreadId telemetryTaskHandle;
-uint32_t telemetryTaskBuffer[ 4096 ];
+uint32_t telemetryTaskBuffer[ 2048 ];
 osStaticThreadDef_t telemetryControlTaskBlock;
 osThreadId printTaskHandle;
 uint32_t printTaskBuffer[ 2048 ];
@@ -357,7 +357,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of telemetryTask */
-  osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 4096, telemetryTaskBuffer, &telemetryControlTaskBlock);
+  osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 2048, telemetryTaskBuffer, &telemetryControlTaskBlock);
   telemetryTaskHandle = osThreadCreate(osThread(telemetryTask), NULL);
 
   /* definition and creation of printTask */
@@ -565,7 +565,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 1000000;
+  huart2.Init.BaudRate = 115200;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -614,9 +614,9 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, EPAP_CS_Pin|EPAP_DC_Pin|MAS1_Pin|PORTA_CS_Pin, GPIO_PIN_RESET);
