@@ -11,7 +11,6 @@
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
 
-
 // Size of CRC per transaction packet
 #define CRC_SIZE_BYTES          2
 
@@ -50,10 +49,18 @@
 #define TIME_READY_US           10
 
 /* ==================================================================== */
+/* ========================= LOCAL VARIABLES ========================== */
+/* ==================================================================== */
+
+static uint8_t txBuffer[MAX_SPI_BUFFER];
+static uint8_t rxBuffer[MAX_SPI_BUFFER];
+
+/* ==================================================================== */
 /* ======================= EXTERNAL VARIABLES ========================= */
 /* ==================================================================== */
 
 extern SPI_HandleTypeDef hspi1;
+
 
 /* ==================================================================== */
 /* ============================ CRC TABLES ============================ */
@@ -171,6 +178,18 @@ static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port);
  * @return Transaction status error code
  */
 static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, uint8_t *txBuff, PORT_E port);
+
+/**
+ * @brief Helper function to process all data CRCs from a read register buffer
+ * @param numDevs Number of chain devices to read from
+ * @param registerBuffer The raw data buffer recieved from the isospi transaction
+ * @param rxBuff Byte array of data to populate with data from device chain
+ * @param port Isospi port on which to command was issued
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ * @param packMonitorIndex The index of the pack monitor device as seen from the current port
+ * @return Transaction status error code
+ */
+static TRANSACTION_STATUS_E processReadRegisterCRCs(uint32_t numDevs, uint8_t *registerBuffer, uint8_t *rxBuff, PORT_E port, uint32_t *localCommandCounter, uint32_t packMonitorIndex);
 
 /**
  * @brief Read data over isospi - data buffer will be populated with 6 bytes per device
@@ -366,13 +385,6 @@ static void incCommandCounter(COMMAND_TYPE_E commandType, uint32_t* localCommand
  */
 static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port)
 {
-    // Size in bytes: Command Word(2) + Command CRC(2)
-    uint32_t packetLength = COMMAND_PACKET_LENGTH;
-
-    // Create a transmit message buffer and a dummy rx buffer
-    uint8_t txBuffer[packetLength];
-    uint8_t rxBuffer[packetLength];
-
     // Populate the tx buffer with the command word
     txBuffer[0] = (uint8_t)(command >> BITS_IN_BYTE);
     txBuffer[1] = (uint8_t)(command);
@@ -384,7 +396,7 @@ static TRANSACTION_STATUS_E sendCommand(uint16_t command, PORT_E port)
 
     // SPIify
     openPort(port);
-    if(taskNotifySPI(&hspi1, txBuffer, rxBuffer, packetLength, SPI_TIMEOUT_MS) != SPI_SUCCESS)
+    if(taskNotifySPI(&hspi1, txBuffer, rxBuffer, COMMAND_PACKET_LENGTH, SPI_TIMEOUT_MS) != SPI_SUCCESS)
     {
         closePort(port);
         return TRANSACTION_SPI_ERROR;
@@ -405,10 +417,6 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
 {
     // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numDevs
     uint32_t packetLength = COMMAND_PACKET_LENGTH + (numDevs * REGISTER_PACKET_LENGTH);
-
-    // Create a transmit message buffer and a dummy rx buffer
-    uint8_t txBuffer[packetLength];
-    uint8_t rxBuffer[packetLength];
 
     // Populate the tx buffer with the command word
     txBuffer[0] = (uint8_t)(command >> BITS_IN_BYTE);
@@ -454,6 +462,84 @@ static TRANSACTION_STATUS_E writeRegister(uint16_t command, uint32_t numDevs, ui
 }
 
 /**
+ * @brief Helper function to process all data CRCs from a read register buffer
+ * @param numDevs Number of chain devices to read from
+ * @param registerBuffer The raw data buffer recieved from the isospi transaction
+ * @param rxBuff Byte array of data to populate with data from device chain
+ * @param port Isospi port on which to command was issued
+ * @param localCommandCounter The array of command counters to be incremented. Each index should hold a device type
+ * @param packMonitorIndex The index of the pack monitor device as seen from the current port
+ * @return Transaction status error code
+ */
+static TRANSACTION_STATUS_E processReadRegisterCRCs(uint32_t numDevs, uint8_t *registerBuffer, uint8_t *rxBuff, PORT_E port, uint32_t *localCommandCounter, uint32_t packMonitorIndex)
+{
+    TRANSACTION_STATUS_E returnStatus = TRANSACTION_SUCCESS;
+    uint8_t registerData[REGISTER_SIZE_BYTES];
+
+    for(uint32_t j = 0; j < numDevs; j++)
+    {
+        // Extract the register data for each bmb into a temporary array
+        memcpy(registerData, registerBuffer + (COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH)), REGISTER_SIZE_BYTES);
+
+        // Extract the CRC and Command Counter sent with the corresponding register data
+        uint16_t pec0 = registerBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES];
+        uint16_t pec1 = registerBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1];
+        uint16_t registerCRC = ((pec0 << BITS_IN_BYTE) | (pec1)) & 0x03FF;
+        uint8_t deviceCommandCounter = (uint8_t)pec0 >> (BITS_IN_BYTE - COMMAND_COUNTER_BITS);
+
+        // If the CRC is incorrect for the data sent, retry the spi transaction
+        if(calculateDataCrc(registerData, REGISTER_SIZE_BYTES, deviceCommandCounter) == registerCRC)
+        {
+            // Determine what device has just been read from, and select the proper local command counter for comparison
+            uint32_t commandCounter;
+            if(j == packMonitorIndex)
+            {
+                commandCounter = localCommandCounter[PACK_MONITOR];
+            }
+            else
+            {
+                commandCounter = localCommandCounter[CELL_MONITOR];
+            }
+
+            // If there is a command counter error, track the error to be returned later
+            // This allows us to finish checking if there is a chain break or crc error before returning
+            if(deviceCommandCounter != commandCounter)
+            {
+                // A single Power on reset error will take priority over a already present command counter error
+                if((deviceCommandCounter != 0) && (returnStatus != TRANSACTION_POR_ERROR))
+                {
+                    returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
+                }
+                else
+                {
+                    returnStatus = TRANSACTION_POR_ERROR;
+                }
+            }
+
+            // Populate rx buffer with local register data
+            // This happens only if there is no crc error, but regardless of if there is a command counter error
+            if(port == PORTA)
+            {
+                // The first indexed data from the read is from the closest device to port A , so data is pasted big endian
+                memcpy(rxBuff + (j * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
+            }
+            else
+            {
+                // The last indexed data from the read is from the closest device to port B , so data is pasted big endian
+                memcpy(rxBuff + ((numDevs - j - 1) * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
+            }
+        }
+        else
+        {
+            // Return CRC error
+            return TRANSACTION_CHAIN_BREAK_ERROR;
+        }
+    }
+
+    return returnStatus;
+}
+
+/**
  * @brief Read data over isospi - data buffer will be populated with 6 bytes per device
  * @param command Command code to initiate read transaction
  * @param numDevs Number of chain devices to read from
@@ -467,10 +553,6 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
 {
     // Size in bytes: Command Word(2) + Command CRC(2) + [Register data(6) + Data CRC(2)] * numDevs
     uint32_t packetLength = COMMAND_PACKET_LENGTH + (numDevs * REGISTER_PACKET_LENGTH);
-
-    // Create transmit and recieve message buffers
-    uint8_t txBuffer[packetLength];
-    uint8_t rxBuffer[packetLength];
 
     // Clear tx buffer array
     memset(txBuffer, 0, packetLength);
@@ -496,74 +578,9 @@ static TRANSACTION_STATUS_E readRegister(uint16_t command, uint32_t numDevs, uin
         }
         closePort(port);
 
-        TRANSACTION_STATUS_E returnStatus = TRANSACTION_SUCCESS;
-
-        for(uint32_t j = 0; j < numDevs; j++)
-        {
-            // Extract the register data for each bmb into a temporary array
-            uint8_t registerData[REGISTER_SIZE_BYTES];
-            memcpy(registerData, rxBuffer + (COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH)), REGISTER_SIZE_BYTES);
-
-            // Extract the CRC and Command Counter sent with the corresponding register data
-            uint16_t pec0 = rxBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES];
-            uint16_t pec1 = rxBuffer[COMMAND_PACKET_LENGTH + (j * REGISTER_PACKET_LENGTH) + REGISTER_SIZE_BYTES + 1];
-            uint16_t registerCRC = ((pec0 << BITS_IN_BYTE) | (pec1)) & 0x03FF;
-            uint8_t deviceCommandCounter = (uint8_t)pec0 >> (BITS_IN_BYTE - COMMAND_COUNTER_BITS);
-
-            // If the CRC is incorrect for the data sent, retry the spi transaction
-            if(calculateDataCrc(registerData, REGISTER_SIZE_BYTES, deviceCommandCounter) == registerCRC)
-            {
-                // Determine what device has just been read from, and select the proper local command counter for comparison
-                uint32_t commandCounter;
-                if(j == packMonitorIndex)
-                {
-                    commandCounter = localCommandCounter[PACK_MONITOR];
-                }
-                else
-                {
-                    commandCounter = localCommandCounter[CELL_MONITOR];
-                }
-
-                // If there is a command counter error, track the error to be returned later
-                // This allows us to finish checking if there is a chain break or crc error before returning
-                if(deviceCommandCounter != commandCounter)
-                {
-                    // A single Power on reset error will take priority over a already present command counter error
-                    if((deviceCommandCounter != 0) && (returnStatus != TRANSACTION_POR_ERROR))
-                    {
-                        returnStatus = TRANSACTION_COMMAND_COUNTER_ERROR;
-                    }
-                    else
-                    {
-                        returnStatus = TRANSACTION_POR_ERROR;
-                    }
-                }
-
-                // Populate rx buffer with local register data
-                // This happens only if there is no crc error, but regardless of if there is a command counter error
-                if(port == PORTA)
-                {
-                    // The first indexed data from the read is from the closest device to port A , so data is pasted big endian
-                    memcpy(rxBuff + (j * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
-                }
-                else
-                {
-                    // The last indexed data from the read is from the closest device to port B , so data is pasted big endian
-                    memcpy(rxBuff + ((numDevs - j - 1) * REGISTER_SIZE_BYTES), registerData, REGISTER_SIZE_BYTES);
-                }
-            }
-            else
-            {
-                // If CRC mismatch, break conversion loop and retry SPI transaction
-                returnStatus = TRANSACTION_CHAIN_BREAK_ERROR;
-                break;
-            }
-        }
-
-        // If the previous for loop was broken with a crc error, do not return, try the transaction again
+        TRANSACTION_STATUS_E returnStatus = processReadRegisterCRCs(numDevs, rxBuffer, rxBuff, port, localCommandCounter, packMonitorIndex);
         if(returnStatus != TRANSACTION_CHAIN_BREAK_ERROR)
         {
-            // If there was no crc and all data is good, return a present command counter error or success
             return returnStatus;
         }
     }
