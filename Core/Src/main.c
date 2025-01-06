@@ -129,6 +129,50 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
+
+	if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+	if (hspi == &hspi1)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
+	if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+	if (hspi == &hspi1)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
+	if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
@@ -175,6 +219,23 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
     xTaskNotifyFromISR(telemetryTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
+
+  if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(epaperTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == EPAP_BUSY_Pin)
+  {
+    static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(epaperTaskHandle, 0, eNoAction, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
 }
 
 void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
