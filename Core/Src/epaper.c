@@ -38,6 +38,40 @@
 
 //  openCS, closeCs, reset, sendCommand, sendData, waitBusy, etc
 
+static void openCS(void)
+{
+    HAL_GPIO_WritePin(EPAP_CS_GPIO_Port, EPAP_CS_Pin, GPIO_PIN_RESET);
+}
+
+static void closeCS(void)
+{
+    HAL_GPIO_WritePin(EPAP_CS_GPIO_Port, EPAP_CS_Pin, GPIO_PIN_SET);
+
+}
+
+static void reset(void)
+{
+    HAL_GPIO_WritePin(EPAP_RST_GPIO_Port, EPAP_RST_Pin, GPIO_PIN_RESET);
+    vTaskDelay(10);
+    HAL_GPIO_WritePin(EPAP_RST_GPIO_Port, EPAP_RST_Pin, GPIO_PIN_SET);
+    vTaskDelay(10);
+}
+
+static void sendCommand(uint8_t command)
+{
+    HAL_GPIO_WritePin(EPAP_DC_GPIO_Port, EPAP_DC_Pin, GPIO_PIN_RESET);
+    
+}
+
+static void sendData(uint8_t data)
+{
+
+}
+
+static void waitBusy(void)
+{
+
+}
 
 /* ==================================================================== */
 /* ======================== PUBLIC FUNCTIONS ========================== */

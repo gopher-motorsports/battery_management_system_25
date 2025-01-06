@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include "printTask.h"
 #include "utils.h"
+#include "epaperTask.h"
 
 /* USER CODE END Includes */
 
@@ -47,6 +48,7 @@
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
+SPI_HandleTypeDef hspi2;
 
 TIM_HandleTypeDef htim7;
 
@@ -58,6 +60,9 @@ osStaticThreadDef_t telemetryControlTaskBlock;
 osThreadId printTaskHandle;
 uint32_t printTaskBuffer[ 2048 ];
 osStaticThreadDef_t printTaskControlBlock;
+osThreadId epaperTaskHandle;
+uint32_t epaperTaskBuffer[ 2048 ];
+osStaticThreadDef_t epaperTaskControlBlock;
 /* USER CODE BEGIN PV */
 
 telemetryTaskData_S telemetryTaskData;
@@ -73,8 +78,10 @@ static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_SPI2_Init(void);
 void startTelemetryTask(void const * argument);
 void startPrintTask(void const * argument);
+void startEpaperTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 #ifdef __GNUC__
@@ -132,6 +139,32 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
+
+	if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+	if (hspi == &hspi1)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
+	if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
 }
 
 void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
@@ -152,7 +185,53 @@ void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
     xTaskNotifyFromISR(telemetryTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
+
+  if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(epaperTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
 }
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == EPAP_BUSY_Pin)
+  {
+    static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(epaperTaskHandle, 0, eNoAction, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
+}
+
+void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
+{
+  if (hspi == &hspi1)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(telemetryTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+
+  if (hspi == &hspi2)
+	{
+		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(epaperTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == EPAP_BUSY_Pin)
+  {
+    static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(epaperTaskHandle, 0, eNoAction, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
+}
+
+
 
 /* USER CODE END 0 */
 
@@ -194,6 +273,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM7_Init();
   MX_SPI1_Init();
+  MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -222,6 +302,10 @@ int main(void)
   /* definition and creation of printTask */
   osThreadStaticDef(printTask, startPrintTask, osPriorityLow, 0, 2048, printTaskBuffer, &printTaskControlBlock);
   printTaskHandle = osThreadCreate(osThread(printTask), NULL);
+
+  /* definition and creation of epaperTask */
+  osThreadStaticDef(epaperTask, startEpaperTask, osPriorityBelowNormal, 0, 2048, epaperTaskBuffer, &epaperTaskControlBlock);
+  epaperTaskHandle = osThreadCreate(osThread(epaperTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -329,6 +413,44 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief SPI2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI2_Init(void)
+{
+
+  /* USER CODE BEGIN SPI2_Init 0 */
+
+  /* USER CODE END SPI2_Init 0 */
+
+  /* USER CODE BEGIN SPI2_Init 1 */
+
+  /* USER CODE END SPI2_Init 1 */
+  /* SPI2 parameter configuration*/
+  hspi2.Instance = SPI2;
+  hspi2.Init.Mode = SPI_MODE_MASTER;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.NSS = SPI_NSS_SOFT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_128;
+  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi2.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI2_Init 2 */
+
+  /* USER CODE END SPI2_Init 2 */
+
+}
+
+/**
   * @brief TIM7 Initialization Function
   * @param None
   * @retval None
@@ -432,24 +554,37 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, EPAP_CS_Pin|EPAP_DC_Pin|MAS1_Pin|PORTA_CS_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, PORTB_CS_Pin|EPAP_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(MAS2_GPIO_Port, MAS2_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, MAS1_Pin|PORTA_CS_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PORTB_CS_Pin */
-  GPIO_InitStruct.Pin = PORTB_CS_Pin;
+  /*Configure GPIO pins : EPAP_CS_Pin EPAP_DC_Pin MAS1_Pin PORTA_CS_Pin */
+  GPIO_InitStruct.Pin = EPAP_CS_Pin|EPAP_DC_Pin|MAS1_Pin|PORTA_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(PORTB_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : EPAP_BUSY_Pin */
+  GPIO_InitStruct.Pin = EPAP_BUSY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(EPAP_BUSY_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PORTB_CS_Pin EPAP_RST_Pin */
+  GPIO_InitStruct.Pin = PORTB_CS_Pin|EPAP_RST_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MAS2_Pin */
   GPIO_InitStruct.Pin = MAS2_Pin;
@@ -458,12 +593,9 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MAS2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : MAS1_Pin PORTA_CS_Pin */
-  GPIO_InitStruct.Pin = MAS1_Pin|PORTA_CS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -523,6 +655,32 @@ void startPrintTask(void const * argument)
     vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
   }
   /* USER CODE END startPrintTask */
+}
+
+/* USER CODE BEGIN Header_startEpaperTask */
+/**
+* @brief Function implementing the epaperTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startEpaperTask */
+void startEpaperTask(void const * argument)
+{
+  /* USER CODE BEGIN startEpaperTask */
+  initEpaperTask();
+
+  TickType_t lastEpaperTaskTick;
+  const TickType_t epaperTaskPeriod = pdMS_TO_TICKS(EPAPER_TASK_PERIOD_MS);
+
+  /* Infinite loop */
+
+  for(;;)
+  {
+    runEpaperTask();
+
+    vTaskDelayUntil(&lastEpaperTaskTick, epaperTaskPeriod);
+  }
+  /* USER CODE END startEpaperTask */
 }
 
 /**

@@ -35,7 +35,7 @@ extern "C" {
 
 #define TELEMETRY_TASK_PERIOD_MS  20
 #define PRINT_TASK_PERIOD_MS      1000
-
+#define EPAPER_TASK_PERIOD_MS     5000
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -67,8 +67,21 @@ void Error_Handler(void);
 #define ISO_SPI_MISO_GPIO_Port GPIOA
 #define ISO_SPI_MOSI_Pin GPIO_PIN_7
 #define ISO_SPI_MOSI_GPIO_Port GPIOA
+#define EPAP_CS_Pin GPIO_PIN_12
+#define EPAP_CS_GPIO_Port GPIOB
+#define EPAP_SCK_Pin GPIO_PIN_13
+#define EPAP_SCK_GPIO_Port GPIOB
+#define EPAP_DC_Pin GPIO_PIN_14
+#define EPAP_DC_GPIO_Port GPIOB
+#define EPAP_MOSI_Pin GPIO_PIN_15
+#define EPAP_MOSI_GPIO_Port GPIOB
+#define EPAP_BUSY_Pin GPIO_PIN_6
+#define EPAP_BUSY_GPIO_Port GPIOC
+#define EPAP_BUSY_EXTI_IRQn EXTI9_5_IRQn
 #define PORTB_CS_Pin GPIO_PIN_7
 #define PORTB_CS_GPIO_Port GPIOC
+#define EPAP_RST_Pin GPIO_PIN_8
+#define EPAP_RST_GPIO_Port GPIOC
 #define MAS2_Pin GPIO_PIN_10
 #define MAS2_GPIO_Port GPIOA
 #define MAS1_Pin GPIO_PIN_4

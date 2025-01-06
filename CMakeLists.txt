@@ -51,6 +51,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../../Core/Src/adbms.c
     ../../Core/Src/printTask.c
     ../../Core/Src/telemetryTask.c
+    ../../Core/Src/epaperTask.c
+    ../../Core/Src/epaper.c
     ../../Core/Src/utils.c
     ../../Core/Src/lookupTable.c
     ../../Core/Src/timer.c
