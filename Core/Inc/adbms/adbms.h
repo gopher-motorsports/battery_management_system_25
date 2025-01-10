@@ -292,8 +292,7 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed))
 {
-    uint16_t adcMismatchFlags;
-    uint16_t conversionCounter;
+    uint32_t conversionCounter;
 
     uint8_t redundantAdcMultipleTrimError : 1;
     uint8_t redundantAdcTrimError : 1;
@@ -312,56 +311,32 @@ typedef struct __attribute__((packed))
     uint8_t adcComparisonActive : 1;
     uint8_t supplyRailDeltaFault : 1;
     uint8_t supplyRailDeltaFaultLatching : 1;
+
+    uint8_t cellAdcMismatchFault[NUM_CELLS_PER_CELL_MONITOR];
 } ADBMS_StatusCCellMonitor;
 
 typedef struct __attribute__((packed))
 {
-    uint8_t cell1UnderVoltage : 1;
-    uint8_t cell1OverVoltage : 1;
-    uint8_t cell2UnderVoltage : 1;
-    uint8_t cell2OverVoltage : 1;
-    uint8_t cell3UnderVoltage : 1;
-    uint8_t cell3OverVoltage : 1;
-    uint8_t cell4UnderVoltage : 1;
-    uint8_t cell4OverVoltage : 1;
-
-    uint8_t cell5UnderVoltage : 1;
-    uint8_t cell5OverVoltage : 1;
-    uint8_t cell6UnderVoltage : 1;
-    uint8_t cell6OverVoltage : 1;
-    uint8_t cell7UnderVoltage : 1;
-    uint8_t cell7OverVoltage : 1;
-    uint8_t cell8UnderVoltage : 1;
-    uint8_t cell8OverVoltage : 1;
-
-    uint8_t cell9UnderVoltage : 1;
-    uint8_t cell9OverVoltage : 1;
-    uint8_t cell10UnderVoltage : 1;
-    uint8_t cell10OverVoltage : 1;
-    uint8_t cell11UnderVoltage : 1;
-    uint8_t cell11OverVoltage : 1;
-    uint8_t cell12UnderVoltage : 1;
-    uint8_t cell12OverVoltage : 1;
-
-    uint8_t cell13UnderVoltage : 1;
-    uint8_t cell13OverVoltage : 1;
-    uint8_t cell14UnderVoltage : 1;
-    uint8_t cell14OverVoltage : 1;
-    uint8_t cell15UnderVoltage : 1;
-    uint8_t cell15OverVoltage : 1;
-    uint8_t cell16UnderVoltage : 1;
-    uint8_t cell16OverVoltage : 1;
-
-    uint8_t reserved1;
-
+    uint8_t cellUnderVoltageFault[NUM_CELLS_PER_CELL_MONITOR];
+    uint8_t cellOverVoltageFault[NUM_CELLS_PER_CELL_MONITOR];
     uint8_t oscillatorCounter;
-
 } ADBMS_StatusDCellMonitor;
 
 typedef struct __attribute__((packed))
 {
-    uint16_t gpiState;
-    uint16_t revisionCode
+    uint8_t gpi1State : 1;
+    uint8_t gpi2State : 1;
+    uint8_t gpi3State : 1;
+    uint8_t gpi4State : 1;
+    uint8_t gpi5State : 1;
+    uint8_t gpi6State : 1;
+    uint8_t gpi7State : 1;
+    uint8_t gpi8State : 1;
+
+    uint8_t gpi9State : 1;
+    uint8_t gpi10State : 1;
+    uint8_t reserved1 : 2;
+    uint8_t revisionCode : 4;
 } ADBMS_StatusECellMonitor;
 
 typedef struct __attribute__((packed))
@@ -381,7 +356,7 @@ typedef struct __attribute__((packed))
     float hvSupplyVoltage;
     float switch1Voltage;
 
-    uint8_t dischargePWM[NUM_CELLS_PER_CELL_MONITOR];
+    float dischargePWM[NUM_CELLS_PER_CELL_MONITOR];
 
     uint8_t serialIdGroup[REGISTER_SIZE_BYTES];
     uint8_t retentionRegister[REGISTER_SIZE_BYTES];
@@ -445,21 +420,26 @@ typedef struct __attribute__((packed))
 
 typedef struct
 {
-    /* data */
+    uint8_t byte0;
+    uint8_t byte1;
+    uint8_t byte2;
+    uint8_t byte3;
+    uint8_t byte4;
+    uint8_t byte5;
 } ADBMS_ConfigBPackMonitor;
 
 typedef struct __attribute__((packed))
 {
-    float regulatorVoltage;
+    float referenceVoltage1P25;
     float dieTemp1;
-    float referenceVoltage;
+    float regulatorVoltage;
 } ADBMS_StatusAPackMonitor;
 
 typedef struct __attribute__((packed))
 {
-    float groundPadVoltage;
     float digitalSupplyVoltage;
     float supplyVoltage;
+    float groundPadVoltage;
 } ADBMS_StatusBPackMonitor;
 
 typedef struct __attribute__((packed))
@@ -503,10 +483,9 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed))
 {
-    uint8_t oscillatorCounter;
-    float dieTemp2;
     float referenceResistorVoltage;
-
+    float dieTemp2;
+    uint8_t oscillatorCounter;
 } ADBMS_StatusDPackMonitor;
 
 typedef struct __attribute__((packed))
@@ -689,108 +668,108 @@ TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData * adbmsData);
  */
 TRANSACTION_STATUS_E softReset(ADBMS_BatteryData * adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData * adbmsData);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData * adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E writeNVM(CHAIN_INFO_S *chainInfo, uint8_t *writeData);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E writeNVM(CHAIN_INFO_S *chainInfo, uint8_t *writeData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readNVM(CHAIN_INFO_S *chainInfo, uint8_t *readData);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readNVM(CHAIN_INFO_S *chainInfo, uint8_t *readData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E writeConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E writeConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E writeConfigB(CHAIN_INFO_S *chainInfo, ADBMS_ConfigBCellMonitor *cellMonitorConfigB, ADBMS_ConfigBPackMonitor *packMonitorConfigB);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E writeConfigB(CHAIN_INFO_S *chainInfo, ADBMS_ConfigBCellMonitor *cellMonitorConfigB, ADBMS_ConfigBPackMonitor *packMonitorConfigB);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readConfigB(CHAIN_INFO_S *chainInfo, ADBMS_ConfigBCellMonitor *cellMonitorConfigB, ADBMS_ConfigBPackMonitor *packMonitorConfigB);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readConfigB(CHAIN_INFO_S *chainInfo, ADBMS_ConfigBCellMonitor *cellMonitorConfigB, ADBMS_ConfigBPackMonitor *packMonitorConfigB);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E writePwmRegisters(CHAIN_INFO_S *chainInfo, uint8_t *dischargeDutyCycle);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E writePwmRegisters(CHAIN_INFO_S *chainInfo, uint8_t *dischargeDutyCycle);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readPwmRegisters(CHAIN_INFO_S *chainInfo, uint8_t *dischargeDutyCycle);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readPwmRegisters(CHAIN_INFO_S *chainInfo, uint8_t *dischargeDutyCycle);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readCellVoltages(CHAIN_INFO_S *chainInfo, float *cellVoltageArr, CELL_VOLTAGE_TYPE_E cellVoltageType);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readCellVoltages(CHAIN_INFO_S *chainInfo, float *cellVoltageArr, CELL_VOLTAGE_TYPE_E cellVoltageType);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readAuxVoltages(CHAIN_INFO_S *chainInfo, ADBMS_AuxVoltageGroup *auxVoltageGroup, AUX_VOLTAGE_TYPE_E auxVoltageType);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readAuxVoltages(CHAIN_INFO_S *chainInfo, ADBMS_AuxVoltageGroup *auxVoltageGroup, AUX_VOLTAGE_TYPE_E auxVoltageType);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readStatus(CHAIN_INFO_S *chainInfo, ADBMS_StatusGroupCellMonitor *cellMonitorStatusGroup, ADBMS_StatusGroupPackMonitor *packMonitorStatusGroup);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readStatus(CHAIN_INFO_S *chainInfo, ADBMS_StatusGroupCellMonitor *cellMonitorStatusGroup, ADBMS_StatusGroupPackMonitor *packMonitorStatusGroup);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E readSerialId(CHAIN_INFO_S *chainInfo, uint8_t *serialId);
+// /**
+//  * @brief
+//  * @param chainInfo Chain data struct
+//  * @param
+//  * @return Transaction status error code
+//  */
+// TRANSACTION_STATUS_E readSerialId(CHAIN_INFO_S *chainInfo, uint8_t *serialId);
 
 #endif /* INC_ADBMS_H_ */
