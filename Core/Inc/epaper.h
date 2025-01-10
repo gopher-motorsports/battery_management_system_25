@@ -3,9 +3,9 @@
 
 #include <stdint.h>
 
-// #define EPD_WIDTH   800 
-// #define EPD_HEIGHT  480
-// #define EPD_ARRAY  EPD_WIDTH*EPD_HEIGHT/8  
+#define EPD_WIDTH   800 
+#define EPD_HEIGHT  480
+#define EPD_ARRAY  EPD_WIDTH*EPD_HEIGHT/8  
 
 void sendCommand(uint8_t command);
 void sendData(uint8_t *data, uint32_t size);
