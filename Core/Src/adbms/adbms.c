@@ -94,6 +94,7 @@
 
 #define ADV         0x0430
 #define ADX         0x0530
+#define CLRO        0x0713
 
 /* END ADBMS Register addresses */
 
@@ -191,6 +192,13 @@
 #define NUM_CELLS_PWM_B         4
 #define NUM_BYTES_PWM_B         ((NUM_CELLS_PWM_B * PWM_CONFIG_SIZE_BITS) / BITS_IN_BYTE)
 
+#define REGISTER_BYTE0      0
+#define REGISTER_BYTE1      1
+#define REGISTER_BYTE2      2
+#define REGISTER_BYTE3      3
+#define REGISTER_BYTE4      4
+#define REGISTER_BYTE5      5
+
 // Configuration register group A encoding
 #define REFON_BIT       7
 #define CTH_MASK        0x7
@@ -202,6 +210,15 @@
 #define MUTE_ST_BIT     4
 #define COMM_BK_BIT     3
 #define FC_MASK         0x07
+
+#define PACK_MON_COUNTER2_BIT       5
+#define PACK_MON_COUNTER1_MASK      0x1F
+
+// Time for ADBMS device to wake
+#define TIME_WAKE_US            500
+
+// Time for ADBMS device to transition from idle state
+#define TIME_READY_US           10
 
 /* ==================================================================== */
 /* ============================== MACROS ============================== */
@@ -241,58 +258,97 @@ const auxVoltageRegister[NUM_AUX_VOLTAGE_TYPES][NUM_AUXV_REGISTERS] =
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
 
+void wakeChain(ADBMS_BatteryData * adbmsData)
+{
+    if(adbmsData->chainInfo.chainStatus == CHAIN_COMPLETE)
+    {
+        activatePort(adbmsData->chainInfo.numDevs, adbmsData->chainInfo.currentPort, TIME_WAKE_US);
+    }
+    else
+    {
+        activatePort(adbmsData->chainInfo.availableDevices[PORTA], PORTA, TIME_WAKE_US);
+        activatePort(adbmsData->chainInfo.availableDevices[PORTB], PORTB, TIME_WAKE_US);
+    }
+}
 
-TRANSACTION_STATUS_E startCellConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_REDUNDANT_E redundantMode, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_FILTER_E filterMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode)
+void readyChain(ADBMS_BatteryData * adbmsData)
+{
+    if(adbmsData->chainInfo.chainStatus == CHAIN_COMPLETE)
+    {
+        activatePort(adbmsData->chainInfo.numDevs, adbmsData->chainInfo.currentPort, TIME_READY_US);
+    }
+    else
+    {
+        activatePort(adbmsData->chainInfo.availableDevices[PORTA], PORTA, TIME_READY_US);
+        activatePort(adbmsData->chainInfo.availableDevices[PORTB], PORTB, TIME_READY_US);
+    }
+}
+
+TRANSACTION_STATUS_E checkChainStatus(ADBMS_BatteryData * adbmsData)
+{
+    if(adbmsData->chainInfo.chainStatus != CHAIN_COMPLETE)
+    {
+        TRANSACTION_STATUS_E chainStatus = updateChainStatus(&adbmsData->chainInfo);
+        if(chainStatus != TRANSACTION_COMMAND_COUNTER_ERROR)
+        {
+            return chainStatus;
+        }
+    }
+    return TRANSACTION_SUCCESS;
+}
+
+
+TRANSACTION_STATUS_E startCellConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_REDUNDANT_E redundantMode, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_FILTER_E filterMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode)
 {
     return commandChain((uint16_t)(ADCV | redundantMode | continousMode | dischargeMode | filterMode | openWireMode), &adbmsData->chainInfo, SHARED_COMMAND);
 }
 
-TRANSACTION_STATUS_E startRedundantCellConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode)
+TRANSACTION_STATUS_E startRedundantCellConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode)
 {
     return commandChain((uint16_t)(ADSV | continousMode | dischargeMode | openWireMode), &adbmsData->chainInfo, SHARED_COMMAND);
 }
 
-TRANSACTION_STATUS_E startAuxConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel, ADC_MODE_AUX_OPEN_WIRE_E openWireMode)
+TRANSACTION_STATUS_E startAuxConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel, ADC_MODE_AUX_OPEN_WIRE_E openWireMode)
 {
     return commandChain((uint16_t)(ADAX | auxChannel | openWireMode), &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
 }
 
-TRANSACTION_STATUS_E startRedundantAuxConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel)
+TRANSACTION_STATUS_E startRedundantAuxConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel)
 {
     return commandChain((uint16_t)(ADAX2 | auxChannel), &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
 }
 
-TRANSACTION_STATUS_E startPackVoltageConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_PACK_CHANNEL_E packChannel, ADC_MODE_PACK_OPEN_WIRE_E openWireMode)
+TRANSACTION_STATUS_E startPackVoltageConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_PACK_CHANNEL_E packChannel, ADC_MODE_PACK_OPEN_WIRE_E openWireMode)
 {
     return commandChain((uint16_t)(ADV | packChannel | openWireMode), &adbmsData->chainInfo, PACK_MONITOR_COMMAND);
 }
 
-TRANSACTION_STATUS_E startPackAuxillaryConversions(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E startPackAuxillaryConversions(ADBMS_BatteryData *adbmsData)
 {
     return commandChain((uint16_t)(ADX), &adbmsData->chainInfo, PACK_MONITOR_COMMAND);
 }
 
-TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData *adbmsData)
 {
-    return commandChain(MUTE, &adbmsData->chainInfo, SHARED_COMMAND);
+    return commandChain(MUTE, &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
 }
 
-TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData *adbmsData)
 {
     return commandChain(UNMUTE, &adbmsData->chainInfo, SHARED_COMMAND);
 }
 
-TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData *adbmsData)
 {
     return commandChain(SNAP, &adbmsData->chainInfo, SHARED_COMMAND);
 }
 
-TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData *adbmsData)
 {
     return commandChain(UNSNAP, &adbmsData->chainInfo, SHARED_COMMAND);
 }
 
-TRANSACTION_STATUS_E softReset(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E softReset(ADBMS_BatteryData *adbmsData)
 {
     return commandChain(SRST, &adbmsData->chainInfo, SHARED_COMMAND);
 }
@@ -300,44 +356,53 @@ TRANSACTION_STATUS_E softReset(ADBMS_BatteryData * adbmsData)
 
 
 
-// TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData * adbmsData)
-// {
-//     TRANSACTION_STATUS_E status;
+TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData *adbmsData)
+{
+    TRANSACTION_STATUS_E status = commandChain(CLRCELL, &adbmsData->chainInfo, SHARED_COMMAND);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-//     uint16_t clearCommands[NUM_CLEAR_COMMANDS] = {CLRCELL, CLRFC, CLRAUX, CLRSPIN};
+    status = commandChain(CLRCELL, &adbmsData->chainInfo, SHARED_COMMAND);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-//     for(uint32_t i = 0; i < (NUM_CLEAR_COMMANDS-1); i++)
-//     {
-//         status = commandChain(clearCommands[i], &adbmsData->chainInfo, SHARED_COMMAND);
-//         if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//         {
-//             return status;
-//         }
-//     }
+    status = commandChain(CLRFC, &adbmsData->chainInfo, SHARED_COMMAND);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-//     return commandChain(clearCommands[NUM_CLEAR_COMMANDS-1], &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
-// }
+    status = commandChain(CLRAUX, &adbmsData->chainInfo, SHARED_COMMAND);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-// TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData * adbmsData)
-// {
-//     TRANSACTION_STATUS_E status;
+    status = commandChain(CLRSPIN, &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-//     // Create and fill pack monitor data buffer with 1s
-//     uint8_t packMonitorDataBuffer[REGISTER_SIZE_BYTES];
-//     memset(packMonitorDataBuffer, 0xFF, REGISTER_SIZE_BYTES);
+    return commandChain(CLRO, &adbmsData->chainInfo, PACK_MONITOR_COMMAND);
+}
 
-//     // Create and fill cell monitor data buffer with 1s
-//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1)];
-//     memset(cellMonitorDataBuffer, 0xFF, REGISTER_SIZE_BYTES * (chainInfo->numDevs - 1));
+TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData *adbmsData)
+{
+    memset(transactionBuffer, 0xFF, (adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES));
 
-//     status = writeChain(CLRFLAG, chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+    TRANSACTION_STATUS_E status = writeChain(CLRFLAG, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-//     return writeChain(CLOVUV, chainInfo, SHARED_COMMAND, packMonitorDataBuffer, cellMonitorDataBuffer);
-// }
+    return writeChain(CLOVUV, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
+}
 
 
 
@@ -490,12 +555,6 @@ TRANSACTION_STATUS_E softReset(ADBMS_BatteryData * adbmsData)
 //     }
 // }
 
-
-
-
-
-
-
 TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData * adbmsData)
 {
     uint8_t *packMonitorDataBuffer;
@@ -521,7 +580,7 @@ TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData * adbmsData)
     return writeChain(WRCFGA, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
 }
 
-TRANSACTION_STATUS_E readConfigA(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E readConfigA(ADBMS_BatteryData *adbmsData)
 {
     memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
@@ -550,7 +609,7 @@ TRANSACTION_STATUS_E readConfigA(ADBMS_BatteryData * adbmsData)
     return status;
 }
 
-TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData *adbmsData)
 {
     uint8_t *packMonitorDataBuffer;
     uint8_t *cellMonitorDataBuffer;
@@ -576,7 +635,7 @@ TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData * adbmsData)
 
 }
 
-TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData *adbmsData)
 {
     memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
@@ -606,7 +665,7 @@ TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData * adbmsData)
 }
 
 
-TRANSACTION_STATUS_E readStatusA(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E readStatusA(ADBMS_BatteryData *adbmsData)
 {
     memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
@@ -631,14 +690,14 @@ TRANSACTION_STATUS_E readStatusA(ADBMS_BatteryData * adbmsData)
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        adbmsData->cellMonitor[i].statusGroupA.referenceVoltage = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), PACK_MON_VREF1P25_GAIN, PACK_MON_VREF1P25_OFFSET);
-        adbmsData->cellMonitor[i].statusGroupA.dieTemp = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_DIE_TEMP1_GAIN, PACK_MON_DIE_TEMP1_OFFSET);
+        adbmsData->cellMonitor[i].statusGroupA.referenceVoltage = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+        adbmsData->cellMonitor[i].statusGroupA.dieTemp = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_DIE_TEMP_GAIN, CELL_MON_DIE_TEMP_OFFSET);
     }
 
     return status;
 }
 
-TRANSACTION_STATUS_E readStatusB(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E readStatusB(ADBMS_BatteryData *adbmsData)
 {
     memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
@@ -671,7 +730,7 @@ TRANSACTION_STATUS_E readStatusB(ADBMS_BatteryData * adbmsData)
     return status;
 }
 
-TRANSACTION_STATUS_E readStatusC(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E readStatusC(ADBMS_BatteryData *adbmsData)
 {
     memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
@@ -691,15 +750,19 @@ TRANSACTION_STATUS_E readStatusC(ADBMS_BatteryData * adbmsData)
     }
 
     memcpy(&adbmsData->packMonitor.statusGroupC, packMonitorDataBuffer, REGISTER_SIZE_BYTES);
-    adbmsData->packMonitor.statusGroupC.conversionCounter1 = packMonitorDataBuffer[REGISTER_BYTE2] >> 5;
-    adbmsData->packMonitor.statusGroupC.conversionCounter2 = (((uint16_t)(packMonitorDataBuffer[REGISTER_BYTE2] & 0x1F)) << BITS_IN_BYTE) | ((uint16_t)(packMonitorDataBuffer[REGISTER_BYTE3]));
+    adbmsData->packMonitor.statusGroupC.conversionCounter1 = (((uint16_t)(packMonitorDataBuffer[REGISTER_BYTE2] & PACK_MON_COUNTER1_MASK)) << BITS_IN_BYTE) | ((uint16_t)(packMonitorDataBuffer[REGISTER_BYTE3]));
+    adbmsData->packMonitor.statusGroupC.conversionCounter2 = packMonitorDataBuffer[REGISTER_BYTE2] >> PACK_MON_COUNTER2_BIT;
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        memcpy(&adbmsData->cellMonitor[i].statusGroupC, cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
-        adbmsData->cellMonitor[i].statusGroupC.conversionCounter = (((uint16_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE2)) << BITS_IN_BYTE) | ((uint16_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE3));
+        uint8_t *statRegister = cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES);
 
-        uint16_t cellAdcMismatchMask = ((uint16_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES))) | (((uint16_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE1)) << BITS_IN_BYTE);
+        memcpy(&adbmsData->cellMonitor[i].statusGroupC, statRegister, REGISTER_SIZE_BYTES);
+
+        adbmsData->cellMonitor[i].statusGroupC.conversionCounter = (((uint16_t)(statRegister[REGISTER_BYTE2])) << BITS_IN_BYTE) | ((uint16_t)(statRegister[REGISTER_BYTE3]));
+
+        uint16_t cellAdcMismatchMask = ((uint16_t)(statRegister[REGISTER_BYTE0])) | (((uint16_t)(statRegister[REGISTER_BYTE1])) << BITS_IN_BYTE);
+
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
             adbmsData->cellMonitor[i].statusGroupC.cellAdcMismatchFault[j] = ((cellAdcMismatchMask >> j) & 0x0001);
@@ -709,11 +772,11 @@ TRANSACTION_STATUS_E readStatusC(ADBMS_BatteryData * adbmsData)
     return status;
 }
 
-TRANSACTION_STATUS_E readStatusD(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E readStatusD(ADBMS_BatteryData *adbmsData)
 {
     memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
-    TRANSACTION_STATUS_E status = readChain(RDSTATC, &adbmsData->chainInfo, transactionBuffer);
+    TRANSACTION_STATUS_E status = readChain(RDSTATD, &adbmsData->chainInfo, transactionBuffer);
 
     uint8_t *packMonitorDataBuffer;
     uint8_t *cellMonitorDataBuffer;
@@ -734,12 +797,16 @@ TRANSACTION_STATUS_E readStatusD(ADBMS_BatteryData * adbmsData)
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        adbmsData->cellMonitor[i].statusGroupD.oscillatorCounter = (cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE5);
+        uint8_t *statRegister = cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES);
 
-        uint32_t cellFaultMask =    ((uint32_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES))) |
-                                    (((uint32_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE1)) << BITS_IN_BYTE) |
-                                    (((uint32_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE2)) << (2 * BITS_IN_BYTE)) |
-                                    (((uint32_t)(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE3)) << (3 * BITS_IN_BYTE));
+        adbmsData->cellMonitor[i].statusGroupD.oscillatorCounter = statRegister[REGISTER_BYTE5];
+
+        uint32_t cellFault0 = (uint32_t)statRegister[REGISTER_BYTE0];
+        uint32_t cellFault1 = ((uint32_t)statRegister[REGISTER_BYTE1]) << (BITS_IN_BYTE);
+        uint32_t cellFault2 = ((uint32_t)statRegister[REGISTER_BYTE2]) << (BITS_IN_BYTE * 2);
+        uint32_t cellFault3 = ((uint32_t)statRegister[REGISTER_BYTE3]) << (BITS_IN_BYTE * 3);
+
+        uint32_t cellFaultMask = (cellFault0) | (cellFault1) | (cellFault2) | (cellFault3);
 
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
@@ -751,11 +818,11 @@ TRANSACTION_STATUS_E readStatusD(ADBMS_BatteryData * adbmsData)
     return status;
 }
 
-TRANSACTION_STATUS_E readStatusE(ADBMS_BatteryData * adbmsData)
+TRANSACTION_STATUS_E readStatusE(ADBMS_BatteryData *adbmsData)
 {
     memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
-    TRANSACTION_STATUS_E status = readChain(RDSTATC, &adbmsData->chainInfo, transactionBuffer);
+    TRANSACTION_STATUS_E status = readChain(RDSTATE, &adbmsData->chainInfo, transactionBuffer);
 
     uint8_t *packMonitorDataBuffer;
     uint8_t *cellMonitorDataBuffer;
@@ -774,7 +841,7 @@ TRANSACTION_STATUS_E readStatusE(ADBMS_BatteryData * adbmsData)
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        memcpy(&adbmsData->cellMonitor[i].statusGroupE, cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE4, 2);
+        memcpy(&adbmsData->cellMonitor[i].statusGroupE, cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + REGISTER_BYTE4, BYTES_IN_WORD);
     }
 
     return status;

@@ -81,9 +81,9 @@ typedef enum
 typedef enum
 {
     REFERENCE_SGND = 0,
-    REFERENCE_1_25V,
-    REFERENCE_V3,
-    REFERENCE_V4
+    REFERENCE_1_25V
+    // REFERENCE_V3,
+    // REFERENCE_V4
 } REFERENCE_VOLTAGE_SETTING_E;
 
 typedef enum
@@ -559,10 +559,10 @@ typedef struct __attribute__((packed))
     uint8_t serialIdGroup[REGISTER_SIZE_BYTES];
 } ADBMS_PackMonitorData;
 
-typedef struct __attribute__((packed))
+typedef struct
 {
     ADBMS_PackMonitorData packMonitor;
-    ADBMS_CellMonitorData cellMonitor[8];
+    ADBMS_CellMonitorData cellMonitor[1];
     CHAIN_INFO_S chainInfo;
 } ADBMS_BatteryData;
 
@@ -570,7 +570,11 @@ typedef struct __attribute__((packed))
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
 
-//Relink chain?
+void wakeChain(ADBMS_BatteryData *adbmsData);
+
+void readyChain(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E checkChainStatus(ADBMS_BatteryData *adbmsData);
 
 /**
  * @brief
@@ -578,7 +582,7 @@ typedef struct __attribute__((packed))
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startCellConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_REDUNDANT_E redundantMode, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_FILTER_E filterMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startCellConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_REDUNDANT_E redundantMode, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_FILTER_E filterMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -586,7 +590,7 @@ TRANSACTION_STATUS_E startCellConversions(ADBMS_BatteryData * adbmsData, ADC_MOD
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startRedundantCellConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startRedundantCellConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -594,7 +598,7 @@ TRANSACTION_STATUS_E startRedundantCellConversions(ADBMS_BatteryData * adbmsData
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startAuxConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel, ADC_MODE_AUX_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startAuxConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel, ADC_MODE_AUX_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -602,7 +606,7 @@ TRANSACTION_STATUS_E startAuxConversions(ADBMS_BatteryData * adbmsData, ADC_MODE
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startRedundantAuxConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel);
+TRANSACTION_STATUS_E startRedundantAuxConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel);
 
 /**
  * @brief
@@ -610,7 +614,7 @@ TRANSACTION_STATUS_E startRedundantAuxConversions(ADBMS_BatteryData * adbmsData,
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startPackVoltageConversions(ADBMS_BatteryData * adbmsData, ADC_MODE_PACK_CHANNEL_E packChannel, ADC_MODE_PACK_OPEN_WIRE_E openWireMode);
+TRANSACTION_STATUS_E startPackVoltageConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_PACK_CHANNEL_E packChannel, ADC_MODE_PACK_OPEN_WIRE_E openWireMode);
 
 /**
  * @brief
@@ -618,7 +622,7 @@ TRANSACTION_STATUS_E startPackVoltageConversions(ADBMS_BatteryData * adbmsData, 
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E startPackAuxillaryConversions(ADBMS_BatteryData * adbmsData);
+TRANSACTION_STATUS_E startPackAuxillaryConversions(ADBMS_BatteryData *adbmsData);
 
 /**
  * @brief
@@ -626,7 +630,7 @@ TRANSACTION_STATUS_E startPackAuxillaryConversions(ADBMS_BatteryData * adbmsData
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData * adbmsData);
+TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData *adbmsData);
 
 /**
  * @brief
@@ -634,7 +638,7 @@ TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData * adbmsData);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData * adbmsData);
+TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData *adbmsData);
 
 /**
  * @brief
@@ -642,7 +646,7 @@ TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData * adbmsData);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData * adbmsData);
+TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData *adbmsData);
 
 /**
  * @brief
@@ -650,7 +654,7 @@ TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData * adbmsData);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData * adbmsData);
+TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData *adbmsData);
 
 /**
  * @brief
@@ -658,7 +662,7 @@ TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData * adbmsData);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData * adbmsData);
+TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData *adbmsData);
 
 /**
  * @brief
@@ -666,15 +670,37 @@ TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData * adbmsData);
  * @param
  * @return Transaction status error code
  */
-TRANSACTION_STATUS_E softReset(ADBMS_BatteryData * adbmsData);
+TRANSACTION_STATUS_E softReset(ADBMS_BatteryData *adbmsData);
 
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData * adbmsData);
+
+
+
+TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData *adbmsData);
+
+
+
+
+TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E readConfigA(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData *adbmsData);
+
+// -
+TRANSACTION_STATUS_E readStatusA(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E readStatusB(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E readStatusC(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E readStatusD(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E readStatusE(ADBMS_BatteryData *adbmsData);
+
 
 // /**
 //  * @brief
