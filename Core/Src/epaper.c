@@ -44,6 +44,12 @@ extern SPI_HandleTypeDef hspi2;
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
+static void openCS(void);
+static void closeCS(void);
+static void reset(void);
+static void waitBusy(void);
+
+
 
 /* ==================================================================== */
 /* ======================== LOCAL FUNCTIONS =========================== */
@@ -171,7 +177,7 @@ void EPD_init(void)
 
 
 //Display update function
-void EPD_update(void)
+void EPD_Update(void)
 {
     sendCommand(0x12); //display update
     vTaskDelay(1); //delay of at least 200uS
@@ -190,19 +196,19 @@ void EPD_WhiteScreen_All(const unsigned char *data)
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        sendData(data[i], 1);
+        sendData(&data[i], 1);
     }
 
-    EPD_update();
+    EPD_Update();
 }
 
 //clear screen display
 void EPD_WhiteScreen(void)
 {
+    uint8_t zero = 0x00;
     sendCommand(0x10); //write old data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        uint8_t zero = 0x00;
         sendData(&zero, 1);
     }
     sendCommand(0x13); //write new data
@@ -210,7 +216,7 @@ void EPD_WhiteScreen(void)
     {
         sendData(&zero, 1);
     }
-    EPD_update();
+    EPD_Update();
 }
 
 //display all black
@@ -228,7 +234,7 @@ void EPD_BlackScreen(void)
         uint8_t one = 0xff;
         sendData(&one, 1);
     }
-    EPD_update();
+    EPD_Update();
 }
 
 //partial update of background display
@@ -243,9 +249,9 @@ void EPD_SetRamValue_BaseMap(const unsigned char *data)
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        sendData(data[i], 1);
+        sendData(&data[i], 1);
     }
-    EPD_update();
+    EPD_Update();
 }
 
 //Partial update display
@@ -269,9 +275,9 @@ void EPD_Display_Partial(unsigned int x_start,unsigned int y_start,const unsigne
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        sendData(datas[i], 1);
+        sendData(&datas[i], 1);
     }
-    EPD_update();
+    EPD_Update();
 
 }
 
@@ -297,9 +303,9 @@ void EPD_Display_Partial_All(const unsigned char *datas)
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i<PART_COLUMN*PART_LINE/8; i++)
     {
-        sendData(datas[i], 1);
+        sendData(&datas[i], 1);
     }
-    EPD_update();
+    EPD_Update();
 
 }
 
@@ -317,9 +323,62 @@ void EPD_DeepSleep(void)
     data = 0xA5;
     sendData(&data, 1);
 }
+
+
+
+//Partial update write address and data
+void EPD_Display_Partial_RAM(unsigned int x_start,unsigned int y_start,
+	                      const unsigned char * datas_A,const unsigned char * datas_B,
+												const unsigned char * datas_C,const unsigned char * datas_D,const unsigned char * datas_E,
+                        unsigned char num,unsigned int PART_COLUMN,unsigned int PART_LINE)
+{
+	unsigned int x_end,y_end;
+	const unsigned char *datas[] = {datas_A, datas_B, datas_C, datas_D, datas_E};
+
+	x_end=x_start+PART_LINE*num-1; 
+	y_end=y_start+PART_COLUMN-1;
+
+    sendCommand(0x50);
+    uint8_t data[] = {0xA9, 0x07};
+    sendData(data, 2);
+
+    sendCommand(0x91);    //enter partial mode
+    sendCommand(0x90); //resolution setting
+    //x-start, end, y-start, end
+    uint8_t res_data[] = {x_start/256, x_start%256, x_end/256, x_end%256-1, y_start/256, y_start%256, y_end/256, y_end%256-1, 0x01};
+    sendData(res_data, 9);
+
+    sendCommand(0x13); //write new data
+    for(int i=0; i<PART_COLUMN; i++)	     
+    {
+        for (int k = 0; k < 5; k++) {
+            for(int j=0; j<PART_LINE/8; j++)	     
+                sendData(&datas[k][i*PART_LINE/8+j], 1);  
+        }
+    }	
+}
+
+
+
+
+//Clock display
+void EPD_Dis_Part_Time(unsigned int x_start,unsigned int y_start,
+	                      const unsigned char * datas_A,const unsigned char * datas_B,
+												const unsigned char * datas_C,const unsigned char * datas_D,const unsigned char * datas_E,
+                        unsigned char num,unsigned int PART_COLUMN,unsigned int PART_LINE)
+{
+	EPD_Display_Partial_RAM(x_start,y_start,datas_A,datas_B,datas_C,datas_D,datas_E,num,PART_COLUMN,PART_LINE);
+	EPD_Update();
+	sendCommand(0x92);  	//This command makes the display exit partial mode and enter normal mode. 
+ 
+}	
+
+
+
+
 //TODO
 // error handling
     //SPI ERROR - GIVE UP ON TRANSACTION
     // TIMEOUT - DOESNT MATTER ? WAIT MAX TIMEOUT 
-// MAKE SPI BETTER 
+// MAKE SPI BETTER
 
