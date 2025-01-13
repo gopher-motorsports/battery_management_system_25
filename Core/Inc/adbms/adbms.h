@@ -37,21 +37,22 @@ typedef enum
 } COMPARISON_THRESHOLD_E;
 typedef enum
 {
-    AUX_SOAK_TIME_32_US = 0,
-    AUX_SOAK_TIME_64_US,
-    AUX_SOAK_TIME_128_US,
-    AUX_SOAK_TIME_256_US,
-    AUX_SOAK_TIME_512_US,
-    AUX_SOAK_TIME_1_MS,
-    AUX_SOAK_TIME_2_MS,
-    AUX_SOAK_TIME_4_1_MS = 8,
-    AUX_SOAK_TIME_8_2_MS,
-    AUX_SOAK_TIME_16_4_MS,
-    AUX_SOAK_TIME_32_8_MS,
-    AUX_SOAK_TIME_65_5_MS,
-    AUX_SOAK_TIME_131_MS,
-    AUX_SOAK_TIME_262_MS,
-    AUX_SOAK_TIME_524_MS
+    AUX_SOAK_DISABLED =     0x0,
+    AUX_SOAK_TIME_32_US =   0x10,
+    AUX_SOAK_TIME_64_US =   0x11,
+    AUX_SOAK_TIME_128_US =  0x12,
+    AUX_SOAK_TIME_256_US =  0x13,
+    AUX_SOAK_TIME_512_US =  0x14,
+    AUX_SOAK_TIME_1_MS =    0x15,
+    AUX_SOAK_TIME_2_MS =    0x16,
+    AUX_SOAK_TIME_4_1_MS =  0x18,
+    AUX_SOAK_TIME_8_2_MS =  0x19,
+    AUX_SOAK_TIME_16_4_MS = 0x1A,
+    AUX_SOAK_TIME_32_8_MS = 0x1B,
+    AUX_SOAK_TIME_65_5_MS = 0x1C,
+    AUX_SOAK_TIME_131_MS =  0x1D,
+    AUX_SOAK_TIME_262_MS =  0x1E,
+    AUX_SOAK_TIME_524_MS =  0x1F
 } AUX_SOAK_TIME_E;
 
 typedef enum
@@ -80,11 +81,17 @@ typedef enum
 
 typedef enum
 {
-    REFERENCE_SGND = 0,
-    REFERENCE_1_25V
-    // REFERENCE_V3,
-    // REFERENCE_V4
-} REFERENCE_VOLTAGE_SETTING_E;
+    BASIC_REF_SGND = 0,
+    BASIC_REF_1_25V
+} BASIC_REFERENCE_VOLTAGE_SETTING_E;
+
+typedef enum
+{
+    ADVANCED_REF_SGND = 0,
+    ADVANCED_REF_1_25V,
+    ADVANCED_REF_V3,
+    ADVANCED_REF_V4
+} ADVANCED_REFERENCE_VOLTAGE_SETTING_E;
 
 typedef enum
 {
@@ -231,19 +238,18 @@ typedef struct __attribute__((packed))
     uint8_t referenceOn : 1;
 
     // Byte 1
-    uint8_t assertTestModeDetectedFault : 1;
-    uint8_t assertMultipleTrimError : 1;
-    uint8_t asserSingleTrimError : 1;
-    uint8_t assertThermalShutdownDetectedFault : 1;
-    uint8_t supplyErrorSelect : 1;
-    uint8_t asssertSupplyError : 1;
-    uint8_t forceOscillatorCounterSlow : 1;
     uint8_t forceOscillatorCounterFast : 1;
+    uint8_t forceOscillatorCounterSlow : 1;
+    uint8_t asssertSupplyError : 1;
+    uint8_t supplyErrorSelect : 1;
+    uint8_t assertThermalShutdownDetectedFault : 1;
+    uint8_t asserSingleTrimError : 1;
+    uint8_t assertMultipleTrimError : 1;
+    uint8_t assertTestModeDetectedFault : 1;
 
     // Byte 2
     uint8_t reserved2 : 3;
-    AUX_SOAK_TIME_E soakTime : 4;
-    uint8_t soakEnabled : 1;
+    AUX_SOAK_TIME_E soakTime : 5;
 
     // Byte 3
     uint8_t gpo1State : 1;
@@ -366,11 +372,11 @@ typedef struct __attribute__((packed))
 typedef struct __attribute__((packed))
 {
     // Byte 0
-    REFERENCE_VOLTAGE_SETTING_E v1Reference : 2;
-    REFERENCE_VOLTAGE_SETTING_E v2Reference : 2;
-    REFERENCE_VOLTAGE_SETTING_E v3Reference : 1;
-    REFERENCE_VOLTAGE_SETTING_E v4Reference : 1;
-    REFERENCE_VOLTAGE_SETTING_E v5Reference : 1;
+    ADVANCED_REFERENCE_VOLTAGE_SETTING_E v1Reference : 2;
+    ADVANCED_REFERENCE_VOLTAGE_SETTING_E v2Reference : 2;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v3Reference : 1;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v4Reference : 1;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v5Reference : 1;
     uint8_t overcurrentAdcsEnabled : 1;
 
     // Byte 1
@@ -382,11 +388,11 @@ typedef struct __attribute__((packed))
     uint8_t assertTestModeDetectedFault : 1;
 
     // Byte 2
-    REFERENCE_VOLTAGE_SETTING_E v6Reference : 1;
-    REFERENCE_VOLTAGE_SETTING_E v7Reference : 1;
-    REFERENCE_VOLTAGE_SETTING_E v8Reference : 1;
-    REFERENCE_VOLTAGE_SETTING_E v9Reference : 1;
-    REFERENCE_VOLTAGE_SETTING_E v10Reference : 1;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v6Reference : 1;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v7Reference : 1;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v8Reference : 1;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v9Reference : 1;
+    BASIC_REFERENCE_VOLTAGE_SETTING_E v10Reference : 1;
     VOLTAGE_SOAK_TIME_E soakTime : 3;
 
     // Byte 3
@@ -718,37 +724,17 @@ TRANSACTION_STATUS_E readStatusE(ADBMS_BatteryData *adbmsData);
 //  */
 // TRANSACTION_STATUS_E readNVM(CHAIN_INFO_S *chainInfo, uint8_t *readData);
 
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E writeConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA);
 
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readConfigA(CHAIN_INFO_S *chainInfo, ADBMS_ConfigAPackMonitor *packMonitorConfigA, ADBMS_ConfigACellMonitor *cellMonitorConfigA);
+TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData *adbmsData);
 
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E writeConfigB(CHAIN_INFO_S *chainInfo, ADBMS_ConfigBCellMonitor *cellMonitorConfigB, ADBMS_ConfigBPackMonitor *packMonitorConfigB);
 
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readConfigB(CHAIN_INFO_S *chainInfo, ADBMS_ConfigBCellMonitor *cellMonitorConfigB, ADBMS_ConfigBPackMonitor *packMonitorConfigB);
+TRANSACTION_STATUS_E readConfigA(ADBMS_BatteryData *adbmsData);
+
+
+TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData *adbmsData);
+
+
+TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData *adbmsData);
 
 // /**
 //  * @brief
