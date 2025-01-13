@@ -46,27 +46,47 @@ SPI_STATUS_E taskNotifySPI(SPI_HandleTypeDef* hspi, uint8_t* txBuffer, uint8_t* 
     for(uint32_t attemptNum = 0; attemptNum < NUM_SPI_RETRY; attemptNum++)
     {
         // Attempt to start SPI transaction
-        if(HAL_SPI_TransmitReceive_IT(hspi, txBuffer, rxBuffer, size) != HAL_OK)
+        if(rxBuffer == NULL)
         {
-            // If SPI fails to start, HAL must abort transaction. SPI retries
-            HAL_SPI_Abort_IT(hspi);
-            continue;
+            if(HAL_SPI_Transmit_DMA(hspi, txBuffer, size) != HAL_OK)
+            {
+                // If SPI fails to start, HAL must abort transaction. Still much wait for the SPI Abort complete interrupt
+                HAL_SPI_Abort_IT(hspi);
+            }
+        }
+        else
+        {
+            if(HAL_SPI_TransmitReceive_DMA(hspi, txBuffer, rxBuffer, size) != HAL_OK)
+            {
+                // If SPI fails to start, HAL must abort transaction. Still much wait for the SPI Abort complete interrupt
+                HAL_SPI_Abort_IT(hspi);
+            }
         }
 
-        // Wait for SPI interrupt to occur. NotificationFlags will hold notification value indicating status of transaction
+        // xTaskNotifyWait will wait for a task notification from the SPI complete, SPI Error, or SPI Abort complete callbacks
+        // The notification flags will be set with SPI_SUCCESS on success, and SPI_ERROR otherwise. If the wait times out, flags will not be set
         uint32_t notificationFlags = 0;
-        if(xTaskNotifyWait(TASK_NO_OP, TASK_CLEAR_FLAGS, &notificationFlags, timeout) != pdTRUE)
+        xTaskNotifyWait(TASK_NO_OP, TASK_CLEAR_FLAGS, &notificationFlags, timeout);
+
+        // Check the task notification flags
+        if(notificationFlags == SPI_SUCCESS)
         {
-            // If no SPI interrupt occurs in time, transaction is aborted to prevent any longer delay
+            // If only the success flag is set, return success
+            return SPI_SUCCESS;
+        }
+        else if(notificationFlags == SPI_TIMEOUT)
+        {
+            // If no flags are set, abort the SPI transaction
             HAL_SPI_Abort_IT(hspi);
+
+            // Wait for the SPI abort complete interrupt
+            xTaskNotifyWait(TASK_NO_OP, TASK_CLEAR_FLAGS, &notificationFlags, timeout);
+
+            // Return to prevent any further delay
             return SPI_TIMEOUT;
         }
 
-        // If SPI SUCCESS bit is set in notification value, return success
-        if(notificationFlags & SPI_SUCCESS)
-        {
-            return SPI_SUCCESS;
-        }
+        // If a SPI error flag is set, retry the transaction
     }
 
     // After all failed attempts return spi error

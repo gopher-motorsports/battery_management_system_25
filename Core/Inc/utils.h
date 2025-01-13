@@ -37,10 +37,10 @@
 
 typedef enum
 {
-    SPI_TIMEOUT = 0,    // SPI timed out
-    SPI_SUCCESS,        // SPI was successful
-    SPI_ERROR           // SPI error occured
-} SPI_STATUS_E;         // Interupt status enum for task notification flags
+    SPI_TIMEOUT = 0,  // SPI timed out
+    SPI_ERROR,        // SPI error occured
+    SPI_SUCCESS       // SPI was successful
+} SPI_STATUS_E;       // Interupt status enum for task notification flags
 
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DECLARATIONS =================== */
