@@ -5,6 +5,10 @@
 #include "epaperTask.h"
 #include "epaper.h"
 #include "string.h"
+
+
+unsigned char BlackImage[EPD_ARRAY];//Define canvas space  
+
 /* ==================================================================== */
 /* ============================== STRUCTS ============================= */
 /* ==================================================================== */
@@ -25,9 +29,17 @@ void initEpaperTask()
 
 void runEpaperTask()
 {
-    uint8_t data[20];
-    memset(data, 0x0f, 20);
-    sendCommand(0x04);
-    sendData(data, 20);
+    // uint8_t data[20];
+    // memset(data, 0x0f, 20);
+    // sendCommand(0x04);
+    // sendData(data, 20);
+
+    EPD_init(); // Full screen update init
+    EPD_WhiteScreen(); // clear screen
+    EPD_DeepSleep(); // enter sleep mode
+    vTaskDelay(2000); // delay for 2s
+
+
+
 
 }
