@@ -46,22 +46,23 @@
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
-DMA_HandleTypeDef hdma_spi1_tx;
-DMA_HandleTypeDef hdma_spi1_rx;
 SPI_HandleTypeDef hspi2;
+DMA_HandleTypeDef hdma_spi1_rx;
+DMA_HandleTypeDef hdma_spi1_tx;
+DMA_HandleTypeDef hdma_spi2_tx;
 
 TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart2;
 
 osThreadId telemetryTaskHandle;
-uint32_t telemetryTaskBuffer[ 2048 ];
+uint32_t telemetryTaskBuffer[ 4096 ];
 osStaticThreadDef_t telemetryControlTaskBlock;
 osThreadId printTaskHandle;
 uint32_t printTaskBuffer[ 2048 ];
 osStaticThreadDef_t printTaskControlBlock;
 osThreadId epaperTaskHandle;
-uint32_t epaperTaskBuffer[ 2048 ];
+uint32_t epaperTaskBuffer[ 1024 ];
 osStaticThreadDef_t epaperTaskControlBlock;
 /* USER CODE BEGIN PV */
 
@@ -136,7 +137,6 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
-
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
@@ -154,61 +154,6 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
-
-}
-
-void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
-{
-	if (hspi == &hspi1)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-
-	if (hspi == &hspi2)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-
-}
-
-void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
-{
-	if (hspi == &hspi1)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-
-	if (hspi == &hspi2)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-
-}
-
-void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
-{
-	if (hspi == &hspi1)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR(telemetryTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-
-	if (hspi == &hspi2)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR(epaperTaskHandle, SPI_SUCCESS, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-
 }
 
 void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
@@ -228,16 +173,6 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
 	}
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  if (GPIO_Pin == EPAP_BUSY_Pin)
-  {
-    static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xTaskNotifyFromISR(epaperTaskHandle, 0, eNoAction, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-  }
-}
-
 void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
 {
   if (hspi == &hspi1)
@@ -264,35 +199,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
 }
-
-void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
-{
-  if (hspi == &hspi1)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xTaskNotifyFromISR(telemetryTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-
-  if (hspi == &hspi2)
-	{
-		static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xTaskNotifyFromISR(epaperTaskHandle, SPI_ERROR, eSetBits, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-}
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  if (GPIO_Pin == EPAP_BUSY_Pin)
-  {
-    static BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xTaskNotifyFromISR(epaperTaskHandle, 0, eNoAction, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-  }
-}
-
-
 
 /* USER CODE END 0 */
 
@@ -357,7 +263,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of telemetryTask */
-  osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 2048, telemetryTaskBuffer, &telemetryControlTaskBlock);
+  osThreadStaticDef(telemetryTask, startTelemetryTask, osPriorityHigh, 0, 4096, telemetryTaskBuffer, &telemetryControlTaskBlock);
   telemetryTaskHandle = osThreadCreate(osThread(telemetryTask), NULL);
 
   /* definition and creation of printTask */
@@ -365,7 +271,7 @@ int main(void)
   printTaskHandle = osThreadCreate(osThread(printTask), NULL);
 
   /* definition and creation of epaperTask */
-  osThreadStaticDef(epaperTask, startEpaperTask, osPriorityBelowNormal, 0, 2048, epaperTaskBuffer, &epaperTaskControlBlock);
+  osThreadStaticDef(epaperTask, startEpaperTask, osPriorityBelowNormal, 0, 1024, epaperTaskBuffer, &epaperTaskControlBlock);
   epaperTaskHandle = osThreadCreate(osThread(epaperTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -458,7 +364,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
   hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -590,8 +496,12 @@ static void MX_DMA_Init(void)
 
   /* DMA controller clock enable */
   __HAL_RCC_DMA2_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Stream4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
@@ -614,9 +524,9 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, EPAP_CS_Pin|EPAP_DC_Pin|MAS1_Pin|PORTA_CS_Pin, GPIO_PIN_RESET);
@@ -728,18 +638,10 @@ void startPrintTask(void const * argument)
 void startEpaperTask(void const * argument)
 {
   /* USER CODE BEGIN startEpaperTask */
-  initEpaperTask();
-
-  TickType_t lastEpaperTaskTick;
-  const TickType_t epaperTaskPeriod = pdMS_TO_TICKS(EPAPER_TASK_PERIOD_MS);
-
   /* Infinite loop */
-
   for(;;)
   {
-    runEpaperTask();
-
-    vTaskDelayUntil(&lastEpaperTaskTick, epaperTaskPeriod);
+    osDelay(1);
   }
   /* USER CODE END startEpaperTask */
 }
