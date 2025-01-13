@@ -76,6 +76,19 @@ TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         return status;
     }
 
+    status = clearAllVoltageRegisters(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    // Weird bug if this comes before clearAllVoltageRegisters
+    status = clearAllFlags(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
     return startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, NO_FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
 }
 
@@ -122,32 +135,27 @@ TRANSACTION_STATUS_E testBlock(telemetryTaskData_S *taskData)
         return status;
     }
 
-    // batteryData.packMonitor.configGroupA.v5Reference = REFERENCE_1_25V;
-    // batteryData.packMonitor.configGroupA.assertThermalShutdownDetectedFault = 1;
-    // batteryData.packMonitor.configGroupA.soakTime = VOLTAGE_SOAK_TIME_20_MS;
-    // batteryData.packMonitor.configGroupA.gpo4State = 1;
-    // batteryData.packMonitor.configGroupA.gpo5HighZMode = 1;
-    // batteryData.packMonitor.configGroupA.packVoltage1DifferentialMode = 1;
+    // batteryData.packMonitor.configGroupA.v1Reference = ADVANCED_REF_V3;
+    // batteryData.packMonitor.configGroupA.v3Reference = BASIC_REF_1_25V;
+    // batteryData.packMonitor.configGroupA.v5Reference = BASIC_REF_1_25V;
 
-    // batteryData.cellMonitor[0].configGroupA.referenceOn = 1;
     // batteryData.cellMonitor[0].configGroupA.comparisonThreshold = COMPARE_THRESHOLD_10_mV;
-    // batteryData.cellMonitor[0].configGroupA.assertThermalShutdownDetectedFault = 1;
-    // batteryData.cellMonitor[0].configGroupA.soakEnabled = 1;
+    // batteryData.cellMonitor[0].configGroupA.asserSingleTrimError = 1;
     // batteryData.cellMonitor[0].configGroupA.soakTime = AUX_SOAK_TIME_262_MS;
     // batteryData.cellMonitor[0].configGroupA.gpo6State = 1;
     // batteryData.cellMonitor[0].configGroupA.digitalFilterSetting = FILTER_CUTOFF_45_HZ;
 
-    // status = writeConfigA(&batteryData);
-    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    // {
-    //     return status;
-    // }
+    status = writeConfigA(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-    // status = readConfigA(&batteryData);
-    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    // {
-    //     return status;
-    // }
+    status = readConfigA(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
     status = readStatusA(&batteryData);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))

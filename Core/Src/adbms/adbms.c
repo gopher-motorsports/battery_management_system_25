@@ -183,6 +183,21 @@
 #define MAX_CELLV_SENSOR_VALUE  6.41505f
 #define MIN_CELLV_SENSOR_VALUE  -3.4152f
 
+#define MAX_OV_UV_VALUE         6.4128f
+#define MIN_OV_UV_VALUE         -3.4152f
+
+#define CELL_OV_UV_MASK         0x00000FFF
+#define CELL_OV_UV_BITS         12
+
+#define DTM_ENABLE              0x80
+#define DTM_LONG_RANGE_ENABLE   0x40
+#define DTM_TIME_MASK           0x3F
+
+#define DTM_SHORT_RANGE_MAX     63
+#define DTM_LONG_RANGE_MAX      1008
+#define DTM_LONG_RANGE_STEP     16
+
+
 #define PWM_CONFIG_SIZE_BITS    4
 #define PWM_CONFIG_RANGE        15
 #define PWM_PERCENT_RANGE       100
@@ -359,12 +374,6 @@ TRANSACTION_STATUS_E softReset(ADBMS_BatteryData *adbmsData)
 TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData *adbmsData)
 {
     TRANSACTION_STATUS_E status = commandChain(CLRCELL, &adbmsData->chainInfo, SHARED_COMMAND);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    status = commandChain(CLRCELL, &adbmsData->chainInfo, SHARED_COMMAND);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
@@ -628,7 +637,72 @@ TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData *adbmsData)
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        memcpy(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), &adbmsData->cellMonitor[i].configGroupB, REGISTER_SIZE_BYTES);
+        uint8_t *deviceRegister = cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES);
+
+        float underVoltageThresh = adbmsData->cellMonitor[i].configGroupB.undervoltageThreshold;
+        float overVoltageThresh = adbmsData->cellMonitor[i].configGroupB.overvoltageThreshold;
+
+        if(underVoltageThresh < MIN_OV_UV_VALUE)
+        {
+            underVoltageThresh = MIN_OV_UV_VALUE;
+        }
+        else if(underVoltageThresh > MAX_OV_UV_VALUE)
+        {
+            underVoltageThresh = MAX_OV_UV_VALUE;
+        }
+
+        if(overVoltageThresh < MIN_OV_UV_VALUE)
+        {
+            overVoltageThresh = MIN_OV_UV_VALUE;
+        }
+        else if(overVoltageThresh > MAX_OV_UV_VALUE)
+        {
+            overVoltageThresh = MAX_OV_UV_VALUE;
+        }
+
+        uint16_t underVoltageSetting = CONVERT_FLOAT_TO_REGISTER(underVoltageThresh, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET) & CELL_OV_UV_MASK;
+        uint16_t overVoltageSetting = CONVERT_FLOAT_TO_REGISTER(overVoltageThresh, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET) & CELL_OV_UV_MASK;
+        uint32_t cellThresholdSettings = underVoltageSetting | (overVoltageSetting << CELL_OV_UV_BITS);
+
+        deviceRegister[REGISTER_BYTE0] = (uint8_t)(cellThresholdSettings);
+        deviceRegister[REGISTER_BYTE1] = (uint8_t)(cellThresholdSettings >> BITS_IN_BYTE);
+        deviceRegister[REGISTER_BYTE2] = (uint8_t)(cellThresholdSettings >> (2 * BITS_IN_BYTE));
+
+        uint32_t dischargeTimeout = adbmsData->cellMonitor[i].configGroupB.dischargeTimeoutMinutes;
+        uint8_t dischargeTimerSetting = 0;
+        if(dischargeTimeout > 0)
+        {
+            dischargeTimerSetting |= DTM_ENABLE;
+
+            if(dischargeTimeout <= DTM_SHORT_RANGE_MAX)
+            {
+                dischargeTimerSetting |= (uint8_t)dischargeTimeout;
+            }
+            else
+            {
+                dischargeTimerSetting |= DTM_LONG_RANGE_ENABLE;
+
+                if(dischargeTimeout <= DTM_LONG_RANGE_MAX)
+                {
+                    dischargeTimerSetting |= (uint8_t)((dischargeTimeout + (DTM_LONG_RANGE_STEP / 2)) /  DTM_LONG_RANGE_STEP);
+                }
+                else
+                {
+                    dischargeTimerSetting |= (uint8_t)(DTM_LONG_RANGE_MAX /  DTM_LONG_RANGE_STEP);
+                }
+            }
+        }
+
+        deviceRegister[REGISTER_BYTE3] = dischargeTimerSetting;
+
+        uint16_t dischargeMask = 0;
+        for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+        {
+            dischargeMask |= (adbmsData->cellMonitor[i].configGroupB.dischargeCell[j] << j);
+        }
+
+        deviceRegister[REGISTER_BYTE4] = (uint8_t)dischargeMask;
+        deviceRegister[REGISTER_BYTE5] = (uint8_t)(dischargeMask >> BITS_IN_BYTE);
     }
 
     return writeChain(WRCFGB, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
@@ -658,7 +732,38 @@ TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData *adbmsData)
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        memcpy(&adbmsData->cellMonitor[i].configGroupB, cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
+        uint8_t *deviceRegister = cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES);
+
+        uint32_t cellThresholdSettings = (uint32_t)deviceRegister[REGISTER_BYTE0] | ((uint32_t)deviceRegister[REGISTER_BYTE1] << BITS_IN_BYTE) | ((uint32_t)deviceRegister[REGISTER_BYTE2] << (2 * BITS_IN_BYTE));
+        uint16_t underVoltageSetting = cellThresholdSettings & CELL_OV_UV_MASK;
+        uint16_t overVoltageSetting = cellThresholdSettings >> CELL_OV_UV_BITS;
+
+        adbmsData->cellMonitor[i].configGroupB.undervoltageThreshold = (underVoltageSetting * CELL_MON_OV_UV_GAIN) + CELL_MON_OV_UV_OFFSET;
+        adbmsData->cellMonitor[i].configGroupB.overvoltageThreshold = (overVoltageSetting * CELL_MON_OV_UV_GAIN) + CELL_MON_OV_UV_OFFSET;
+
+        uint8_t dischargeTimerSetting = deviceRegister[REGISTER_BYTE3];
+
+        if(dischargeTimerSetting & DTM_ENABLE)
+        {
+            if(dischargeTimerSetting & DTM_LONG_RANGE_ENABLE)
+            {
+                adbmsData->cellMonitor[i].configGroupB.dischargeTimeoutMinutes = ((dischargeTimerSetting & DTM_TIME_MASK) * DTM_LONG_RANGE_STEP);
+            }
+            else
+            {
+                adbmsData->cellMonitor[i].configGroupB.dischargeTimeoutMinutes = (dischargeTimerSetting & DTM_TIME_MASK);
+            }
+        }
+        else
+        {
+            adbmsData->cellMonitor[i].configGroupB.dischargeTimeoutMinutes = 0;
+        }
+
+        uint16_t dischargeMask = (uint16_t)deviceRegister[REGISTER_BYTE4] | ((uint16_t)deviceRegister[REGISTER_BYTE5] << BITS_IN_BYTE);
+        for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+        {
+            adbmsData->cellMonitor[i].configGroupB.dischargeCell[j] = (dischargeMask >> j) & 0x0001;
+        }
     }
 
     return status;
