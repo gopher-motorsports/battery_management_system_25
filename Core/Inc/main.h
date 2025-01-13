@@ -35,7 +35,7 @@ extern "C" {
 
 #define TELEMETRY_TASK_PERIOD_MS  20
 #define PRINT_TASK_PERIOD_MS      1000
-#define EPAPER_TASK_PERIOD_MS     1000
+#define EPAPER_TASK_PERIOD_MS     20000
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/

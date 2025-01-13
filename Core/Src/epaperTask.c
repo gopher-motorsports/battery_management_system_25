@@ -35,11 +35,7 @@ void runEpaperTask()
     // sendData(data, 20);
 
     EPD_init(); // Full screen update init
-    EPD_WhiteScreen(); // clear screen
+    EPD_BlackScreen(); // clear screen
     EPD_DeepSleep(); // enter sleep mode
-    vTaskDelay(2000); // delay for 2s
-
-
-
 
 }

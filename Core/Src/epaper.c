@@ -32,6 +32,9 @@
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
 
+uint8_t dataBuffer[10];
+
+
 /* ==================================================================== */
 /* ======================= EXTERNAL VARIABLES ========================= */
 /* =============================
@@ -80,44 +83,31 @@ static void reset(void)
 void sendCommand(uint8_t command)
 {
     uint8_t txBuffer[1] = {command};
-    uint8_t rxBuffer[1] = {0};
-
 
     HAL_GPIO_WritePin(EPAP_DC_GPIO_Port, EPAP_DC_Pin, GPIO_PIN_RESET);
 
     // SPIify
     openCS();
-    if(taskNotifySPI(&hspi2, txBuffer, rxBuffer, 1, SPI_TIMEOUT_MS) != SPI_SUCCESS)
-    {
-        closeCS();
-    }
+    taskNotifySPI(&hspi2, txBuffer, NULL, 1, SPI_TIMEOUT_MS);
     closeCS();
 }
 
 void sendData(uint8_t *data, uint32_t size)
 {
-    uint8_t rxBuffer[size];
 
     HAL_GPIO_WritePin(EPAP_DC_GPIO_Port, EPAP_DC_Pin, GPIO_PIN_SET);
 
     // SPIify
     openCS();
-    if(taskNotifySPI(&hspi2, data, rxBuffer, size, SPI_TIMEOUT_MS) != SPI_SUCCESS)
-    {
-        closeCS();
-    }
+    taskNotifySPI(&hspi2, data, NULL, size, SPI_TIMEOUT_MS);
     closeCS();
 }
 
 
 static void waitBusy(void)
 {
-    if(xTaskNotifyWait(0, 0, NULL, BUSY_TIMEOUT_MS) != pdTRUE)
-    {
-        //return error 
-    }
+    xTaskNotifyWait(0, 0, NULL, BUSY_TIMEOUT_MS);
 
-    
 }
 
 
@@ -127,51 +117,61 @@ static void waitBusy(void)
 /* ==================================================================== */
 
 //functions that update dislpay
-void lcd_chkstatus(void)
-{
-    while(HAL_GPIO_ReadPin(EPAP_BUSY_GPIO_Port, EPAP_BUSY_Pin) == GPIO_PIN_SET)
-    {
-        vTaskDelay(10);
-    }
-}
+//WAIT BUSY REPLACES THIS
+// void lcd_chkstatus(void)
+// {
+//     while(HAL_GPIO_ReadPin(EPAP_BUSY_GPIO_Port, EPAP_BUSY_Pin) == GPIO_PIN_SET)
+//     {
+//         vTaskDelay(10);
+//     }
+// }
 
 //Full screen update initialization
 void EPD_init(void)
 {
+    reset();
+    
     sendCommand(0x01); // power setting
-    uint8_t data[] = {0x03, 0x00, 0x2b, 0x2b, 0x09};
-    sendData(data, 5);
+    dataBuffer[0] = 0x07;
+    dataBuffer[1] = 0x07;
+    dataBuffer[2] = 0x3f;
+    dataBuffer[3] = 0x3f;
+    sendData(dataBuffer, 4);
 
     sendCommand(0x06); // booster soft start
-    uint8_t boosterData[] = {0x17, 0x17, 0x17};
-    sendData(boosterData, 3);
+    dataBuffer[0] = 0x17;
+    dataBuffer[1] = 0x17;
+    dataBuffer[2] = 0x28;
+    dataBuffer[3] = 0x17;
+    sendData(dataBuffer, 4);
 
     sendCommand(0x04); // power on
-    lcd_chkstatus();
+    vTaskDelay(100);
+    waitBusy();
 
     sendCommand(0x00); // panel setting
-    uint8_t panelData = 0xbf;
-    sendData(&panelData, 1);
-
-    sendCommand(0x30); // PLL control
-    uint8_t pllData = 0x3c;
-    sendData(&pllData, 1);
+    dataBuffer[0] = 0x1f;
+    sendData(dataBuffer, 1);
 
     sendCommand(0x61); // resolution setting
-    uint8_t resData[] = {0x01, 0x90, 0x01, 0x2c};
-    sendData(resData, 4);
+    dataBuffer[0] = 0x03;
+    dataBuffer[1] = 0x20;
+    dataBuffer[2] = 0x01;
+    dataBuffer[3] = 0xE0;
+    sendData(dataBuffer, 4);
 
-    sendCommand(0x82); // VCOM_DC setting
-    uint8_t vcomData = 0x12;
-    sendData(&vcomData, 1);
+    sendCommand(0x15); 
+    dataBuffer[0] = 0x00;
+    sendData(dataBuffer, 1);
 
     sendCommand(0x50); // VCOM and data interval setting
-    uint8_t vcomIntervalData = 0x97;
-    sendData(&vcomIntervalData, 1);
+    dataBuffer[0] = 0x10;
+    dataBuffer[1] = 0x07;
+    sendData(dataBuffer, 2);
 
-    sendCommand(0x20); // display update control
-    uint8_t updateData[] = {0x0f, 0x89};
-    sendData(updateData, 2);
+    sendCommand(0x60); 
+    dataBuffer[0] = 0x22;
+    sendData(dataBuffer, 1);
 }
 
 
@@ -181,16 +181,16 @@ void EPD_Update(void)
 {
     sendCommand(0x12); //display update
     vTaskDelay(1); //delay of at least 200uS
-    lcd_chkstatus(); //wait for the electronic paper IC to release the idle signal
+    waitBusy(); //wait for the electronic paper IC to release the idle signal
 }
 
-void EPD_WhiteScreen_All(const unsigned char *data)
+void EPD_WhiteScreen_All(uint8_t *data)
 {
     sendCommand(0x10); //write old data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        uint8_t zero = 0x00;
-        sendData(&zero, 1);
+        dataBuffer[0] = 0x00;
+        sendData(dataBuffer, 1);
     }
 
     sendCommand(0x13); //write new data
@@ -205,16 +205,16 @@ void EPD_WhiteScreen_All(const unsigned char *data)
 //clear screen display
 void EPD_WhiteScreen(void)
 {
-    uint8_t zero = 0x00;
+    dataBuffer[0] = 0x00;
     sendCommand(0x10); //write old data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        sendData(&zero, 1);
+        sendData(dataBuffer, 1);
     }
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        sendData(&zero, 1);
+        sendData(dataBuffer, 1);
     }
     EPD_Update();
 }
@@ -225,26 +225,26 @@ void EPD_BlackScreen(void)
     sendCommand(0x10); //write old data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        uint8_t zero = 0x00;
-        sendData(&zero, 1);
+        dataBuffer[0] = 0x00;
+        sendData(dataBuffer, 1);
     }
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        uint8_t one = 0xff;
-        sendData(&one, 1);
+        dataBuffer[1] = 0xff;
+        sendData(dataBuffer, 1);
     }
     EPD_Update();
 }
 
 //partial update of background display
-void EPD_SetRamValue_BaseMap(const unsigned char *data)
+void EPD_SetRamValue_BaseMap(uint8_t *data)
 {
     sendCommand(0x10); //write old data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        uint8_t one = 0xff;
-        sendData(&one, 1);
+        dataBuffer[0] = 0xff;
+        sendData(dataBuffer, 1);
     }
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
@@ -255,22 +255,31 @@ void EPD_SetRamValue_BaseMap(const unsigned char *data)
 }
 
 //Partial update display
-void EPD_Display_Partial(unsigned int x_start,unsigned int y_start,const unsigned char * datas,unsigned int PART_COLUMN,unsigned int PART_LINE)
+void EPD_Display_Partial(uint8_t x_start,uint8_t y_start,uint8_t *datas,uint8_t PART_COLUMN,uint8_t PART_LINE)
 {
-	unsigned int x_end,y_end;
+	uint8_t x_end,y_end;
 
 	x_end=x_start+PART_LINE-1; 
 	y_end=y_start+PART_COLUMN-1;
 
     sendCommand(0x50);  
-    uint8_t data[] = {0xA9, 0x07};
-    sendData(data, 2);
+    dataBuffer[0] = 0xA9;
+    dataBuffer[1] = 0x07;
+    sendData(dataBuffer, 2);
 
     sendCommand(0x91);    //enter partial mode
     sendCommand(0x90); //resolution setting
     //x-start, end, y-start, end
-    uint8_t res_data[] = {x_start/256, x_start%256, x_end/256, x_end%256-1, y_start/256, y_start%256, y_end/256, y_end%256-1, 0x01};
-    sendData(res_data, 9);
+    dataBuffer[0] = x_start/256;
+    dataBuffer[1] = x_start%256;
+    dataBuffer[2] = x_end/256;
+    dataBuffer[3] = x_end%256-1;
+    dataBuffer[4] = y_start/256;
+    dataBuffer[5] = y_start%256;
+    dataBuffer[6] = y_end/256;
+    dataBuffer[7] = y_end%256-1;
+    dataBuffer[8] = 0x01;
+    sendData(dataBuffer, 9);
 
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
@@ -282,23 +291,32 @@ void EPD_Display_Partial(unsigned int x_start,unsigned int y_start,const unsigne
 }
 
 //full screen partial update display
-void EPD_Display_Partial_All(const unsigned char *datas)
+void EPD_Display_Partial_All(uint8_t *datas)
 {
-    unsigned int x_start=0,y_start=0,x_end,y_end;
-	unsigned int PART_COLUMN=EPD_HEIGHT,PART_LINE=EPD_WIDTH;
+    uint8_t x_start=0,y_start=0,x_end,y_end;
+	uint8_t PART_COLUMN=EPD_HEIGHT,PART_LINE=EPD_WIDTH;
 
 	x_end=x_start+PART_LINE-1; 
 	y_end=y_start+PART_COLUMN-1;
 
     sendCommand(0x50);
-    uint8_t data[] = {0xA9, 0x07};
-    sendData(data, 2);
+    dataBuffer[0] = 0xA9;
+    dataBuffer[1] = 0x07;
+    sendData(dataBuffer, 2);
 
     sendCommand(0x91);    //enter partial mode
     sendCommand(0x90); //resolution setting
     //x-start, end, y-start, end
-    uint8_t res_data[] = {x_start/256, x_start%256, x_end/256, x_end%256-1, y_start/256, y_start%256, y_end/256, y_end%256-1, 0x01};
-    sendData(res_data, 9);
+    dataBuffer[0] = x_start/256;
+    dataBuffer[1] = x_start%256;
+    dataBuffer[2] = x_end/256;
+    dataBuffer[3] = x_end%256-1;
+    dataBuffer[4] = y_start/256;
+    dataBuffer[5] = y_start%256;
+    dataBuffer[6] = y_end/256;
+    dataBuffer[7] = y_end%256-1;
+    dataBuffer[8] = 0x01;
+    sendData(dataBuffer, 9);
 
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i<PART_COLUMN*PART_LINE/8; i++)
@@ -313,40 +331,49 @@ void EPD_Display_Partial_All(const unsigned char *datas)
 void EPD_DeepSleep(void)
 {
     sendCommand(0x50);
-    uint8_t data = 0xf7;
-    sendData(&data, 1);
+    dataBuffer[0] = 0xf7;
+    sendData(dataBuffer, 1);
 
     sendCommand(0x02); // power off
-    lcd_chkstatus();
+    waitBusy();
     vTaskDelay(100);
     sendCommand(0x07); // deep sleep
-    data = 0xA5;
-    sendData(&data, 1);
+    dataBuffer[0] = 0xA5;
+    sendData(dataBuffer, 1);
 }
 
 
 
 //Partial update write address and data
-void EPD_Display_Partial_RAM(unsigned int x_start,unsigned int y_start,
-	                      const unsigned char * datas_A,const unsigned char * datas_B,
-												const unsigned char * datas_C,const unsigned char * datas_D,const unsigned char * datas_E,
-                        unsigned char num,unsigned int PART_COLUMN,unsigned int PART_LINE)
+void EPD_Display_Partial_RAM(uint8_t x_start,uint8_t y_start,
+	                      uint8_t * datas_A,uint8_t * datas_B,
+												uint8_t * datas_C,uint8_t * datas_D,uint8_t * datas_E,
+                        uint8_t num,uint8_t PART_COLUMN,uint8_t PART_LINE)
 {
-	unsigned int x_end,y_end;
-	const unsigned char *datas[] = {datas_A, datas_B, datas_C, datas_D, datas_E};
+	uint8_t x_end,y_end;
+	uint8_t *datas[] = {datas_A, datas_B, datas_C, datas_D, datas_E};
 
 	x_end=x_start+PART_LINE*num-1; 
 	y_end=y_start+PART_COLUMN-1;
 
     sendCommand(0x50);
-    uint8_t data[] = {0xA9, 0x07};
-    sendData(data, 2);
+    dataBuffer[0] = 0xA9;
+    dataBuffer[1] = 0x07;
+    sendData(dataBuffer, 2);
 
     sendCommand(0x91);    //enter partial mode
     sendCommand(0x90); //resolution setting
     //x-start, end, y-start, end
-    uint8_t res_data[] = {x_start/256, x_start%256, x_end/256, x_end%256-1, y_start/256, y_start%256, y_end/256, y_end%256-1, 0x01};
-    sendData(res_data, 9);
+    dataBuffer[0] = x_start/256;
+    dataBuffer[1] = x_start%256;
+    dataBuffer[2] = x_end/256;
+    dataBuffer[3] = x_end%256-1;
+    dataBuffer[4] = y_start/256;
+    dataBuffer[5] = y_start%256;
+    dataBuffer[6] = y_end/256;
+    dataBuffer[7] = y_end%256-1;
+    dataBuffer[8] = 0x01;
+    sendData(dataBuffer, 9);
 
     sendCommand(0x13); //write new data
     for(int i=0; i<PART_COLUMN; i++)	     
@@ -362,10 +389,10 @@ void EPD_Display_Partial_RAM(unsigned int x_start,unsigned int y_start,
 
 
 //Clock display
-void EPD_Dis_Part_Time(unsigned int x_start,unsigned int y_start,
-	                      const unsigned char * datas_A,const unsigned char * datas_B,
-												const unsigned char * datas_C,const unsigned char * datas_D,const unsigned char * datas_E,
-                        unsigned char num,unsigned int PART_COLUMN,unsigned int PART_LINE)
+void EPD_Dis_Part_Time(uint8_t x_start,uint8_t y_start,
+	                      uint8_t * datas_A,uint8_t * datas_B,
+												uint8_t * datas_C,uint8_t * datas_D,uint8_t * datas_E,
+                        uint8_t num,uint8_t PART_COLUMN,uint8_t PART_LINE)
 {
 	EPD_Display_Partial_RAM(x_start,y_start,datas_A,datas_B,datas_C,datas_D,datas_E,num,PART_COLUMN,PART_LINE);
 	EPD_Update();
