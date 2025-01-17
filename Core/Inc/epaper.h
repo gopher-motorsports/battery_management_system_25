@@ -7,9 +7,7 @@
 #define EPD_HEIGHT  480
 #define EPD_ARRAY  EPD_WIDTH*EPD_HEIGHT/8  
 
-void sendCommand(uint8_t command);
-void sendData(uint8_t *data, uint32_t size);
-void EPD_init(void);
+void EPD_Init(void);
 void EPD_Update(void);
 void EPD_WhiteScreen_All(uint8_t *data);
 void EPD_WhiteScreen(void);
@@ -28,7 +26,7 @@ void EPD_Display_Partial_Time(uint8_t x_start,uint8_t y_start,
                                                 uint8_t * datas_C,uint8_t * datas_D,uint8_t * datas_E,
                         uint8_t num,uint8_t PART_COLUMN,uint8_t PART_LINE);
 
-
+void EPD_Display(unsigned char *Image);
 
 #endif  
 

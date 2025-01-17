@@ -51,7 +51,8 @@ static void openCS(void);
 static void closeCS(void);
 static void reset(void);
 static void waitBusy(void);
-
+static void sendCommand(uint8_t command);
+static void sendData(uint8_t *data, uint32_t size);
 
 
 /* ==================================================================== */
@@ -80,7 +81,7 @@ static void reset(void)
     vTaskDelay(10);
 }
 
-void sendCommand(uint8_t command)
+static void sendCommand(uint8_t command)
 {
     uint8_t txBuffer[1] = {command};
 
@@ -92,7 +93,7 @@ void sendCommand(uint8_t command)
     closeCS();
 }
 
-void sendData(uint8_t *data, uint32_t size)
+static void sendData(uint8_t *data, uint32_t size)
 {
 
     HAL_GPIO_WritePin(EPAP_DC_GPIO_Port, EPAP_DC_Pin, GPIO_PIN_SET);
@@ -127,7 +128,7 @@ static void waitBusy(void)
 // }
 
 //Full screen update initialization
-void EPD_init(void)
+void EPD_Init(void)
 {
     reset();
     
@@ -231,7 +232,7 @@ void EPD_BlackScreen(void)
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        dataBuffer[1] = 0xff;
+        dataBuffer[0] = 0xff;
         sendData(dataBuffer, 1);
     }
     EPD_Update();
@@ -399,6 +400,25 @@ void EPD_Dis_Part_Time(uint8_t x_start,uint8_t y_start,
 	sendCommand(0x92);  	//This command makes the display exit partial mode and enter normal mode. 
  
 }	
+
+
+void EPD_Display(unsigned char *Image)
+{
+    sendCommand(0x10);
+    for(uint32_t i = 0; i < EPD_ARRAY; i++)
+    {
+        dataBuffer[0] = 0x00;
+        sendData(dataBuffer, 1);
+    }
+
+    sendCommand(0x13);
+    for(uint32_t i = 0; i < EPD_ARRAY; i++)
+    {
+        sendData(&Image[i],1);
+    }
+
+    EPD_Update();			 
+}
 
 
 

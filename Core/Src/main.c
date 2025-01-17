@@ -638,10 +638,17 @@ void startPrintTask(void const * argument)
 void startEpaperTask(void const * argument)
 {
   /* USER CODE BEGIN startEpaperTask */
+  initEpaperTask();
+  TickType_t lastEpaperTaskTick;
+  const TickType_t ePaperTaskPeriod = pdMS_TO_TICKS(EPAPER_TASK_PERIOD_MS);
+
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    runEpaperTask();
+
+    vTaskDelayUntil(&lastEpaperTaskTick, ePaperTaskPeriod);
+
   }
   /* USER CODE END startEpaperTask */
 }

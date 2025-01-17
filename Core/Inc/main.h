@@ -29,13 +29,13 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 
-/* Private includes ----------------------------------------------------------*/
+/* Private includes -----------------------------------------------p-----------*/
 /* USER CODE BEGIN Includes */
 #include "telemetryTask.h"
 
 #define TELEMETRY_TASK_PERIOD_MS  20
 #define PRINT_TASK_PERIOD_MS      1000
-#define EPAPER_TASK_PERIOD_MS     20000
+#define EPAPER_TASK_PERIOD_MS     5000
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
