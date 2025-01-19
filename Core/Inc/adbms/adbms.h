@@ -17,8 +17,19 @@
 #define NUM_PACK_MONITOR_GPIO       4
 #define NUM_PACK_MONITOR_GPO        6
 
-#define NUM_PACK_VOLTAGES           10
-#define NUM_REDUNDANT_PACK_VOLTAGES 6
+#define NUM_PACK_AUX_VOLTAGES       10
+#define NUM_PACK_RD_AUX_VOLTAGES    6
+
+#define REGISTER_BYTE0      0
+#define REGISTER_BYTE1      1
+#define REGISTER_BYTE2      2
+#define REGISTER_BYTE3      3
+#define REGISTER_BYTE4      4
+#define REGISTER_BYTE5      5
+
+#define DEVICE_ID_MASK      0x7E
+#define CELL_MONITOR_ID     0x06
+#define PACK_MONITOR_ID     0x0C
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -96,14 +107,48 @@ typedef enum
 typedef enum
 {
     ACCUMULATE_4_SAMPLES = 0,
-    ACCUMULATE_8_SAMPLES = 0,
-    ACCUMULATE_12_SAMPLES = 0,
-    ACCUMULATE_16_SAMPLES = 0,
-    ACCUMULATE_20_SAMPLES = 0,
-    ACCUMULATE_24_SAMPLES = 0,
-    ACCUMULATE_28_SAMPLES = 0,
-    ACCUMULATE_32_SAMPLES = 0
+    ACCUMULATE_8_SAMPLES,
+    ACCUMULATE_12_SAMPLES,
+    ACCUMULATE_16_SAMPLES,
+    ACCUMULATE_20_SAMPLES,
+    ACCUMULATE_24_SAMPLES,
+    ACCUMULATE_28_SAMPLES,
+    ACCUMULATE_32_SAMPLES
 } ACCUMULATION_COUNTER_SETTING_E;
+
+typedef enum
+{
+    DEGLITCH_DISABLED = 0,
+    DEGLITCH_2_OUT_OF_3,
+    DEGLITCH_4_OUT_OF_8,
+    DEGLITCH_7_OUT_OF_8
+} OVERCURRENT_DEGLITCH_SETTING_E;
+
+typedef enum
+{
+    OVERCURRENT_GAIN_5_mV = 0,
+    OVERCURRENT_GAIN_2_5_mV
+} OVERCURRENT_GAIN_CONTROL_SETTING_E;
+
+typedef enum
+{
+    OVERCURRENT_OUTPUTS_DISABLED = 0,
+    OVERCURRENT_OUTPUTS_PWM1,
+    OVERCURRENT_OUTPUTS_PWM2,
+    OVERCURRENT_OUTPUTS_STATIC
+} OVERCURRENT_OUTPUT_SETTING_E;
+
+typedef enum
+{
+    NO_INJECTION_CONVERT_REGULAR = 0,
+    INJECT_IxA_VBATT,
+    INJECT_IxB_SGND,
+    INJECT_SxA_CONVERT_SxA_VS_IxA,
+    CONVERT_SxA_VS_IxA_SGND_VS_SGND,
+    CONVERT_VDIV,
+    CONVERT_SCALED_VREF,
+    INJECT_IxB_CONVERT_SxA_VS_IxA
+} PACK_ADC_DIAGNOSTIC_SETTING_E;
 
 typedef enum
 {
@@ -213,7 +258,6 @@ typedef enum
     RAW_CELL_VOLTAGE = 0,
     AVERAGED_CELL_VOLTAGE,
     FILTERED_CELL_VOLTAGE,
-    REDUNDANT_CELL_VOLTAGE,
     NUM_CELL_VOLTAGE_TYPES
 } CELL_VOLTAGE_TYPE_E;
 
@@ -223,6 +267,13 @@ typedef enum
     REDUNDANT_AUX_VOLTAGES,
     NUM_AUX_VOLTAGE_TYPES
 } AUX_VOLTAGE_TYPE_E;
+
+typedef enum
+{
+    PACK_ADC1 = 0,
+    PACK_ADC2,
+    NUM_PACK_ADCS
+} PACK_ADC_TYPE_E;
 
 /* ==================================================================== */
 /* ============================== STRUCTS============================== */
@@ -357,14 +408,17 @@ typedef struct __attribute__((packed))
     ADBMS_StatusECellMonitor statusGroupE;
 
     float cellVoltage[NUM_CELLS_PER_CELL_MONITOR];
+    float redundantCellVoltage[NUM_CELLS_PER_CELL_MONITOR];
+
     float auxVoltage[NUM_CELL_MONITOR_GPIO];
+    float reduntantAuxVoltage[NUM_CELL_MONITOR_GPIO];
 
     float hvSupplyVoltage;
     float switch1Voltage;
 
     float dischargePWM[NUM_CELLS_PER_CELL_MONITOR];
 
-    uint8_t serialIdGroup[REGISTER_SIZE_BYTES];
+    uint8_t serialId[REGISTER_SIZE_BYTES];
     uint8_t retentionRegister[REGISTER_SIZE_BYTES];
 
 } ADBMS_CellMonitorData;
@@ -424,14 +478,32 @@ typedef struct __attribute__((packed))
 
 } ADBMS_ConfigAPackMonitor;
 
-typedef struct
+typedef struct __attribute__((packed))
 {
-    uint8_t byte0;
-    uint8_t byte1;
-    uint8_t byte2;
-    uint8_t byte3;
-    uint8_t byte4;
-    uint8_t byte5;
+    uint8_t oc1Threshold;
+    uint8_t oc2Threshold;
+    uint8_t oc3Threshold;
+
+    OVERCURRENT_DEGLITCH_SETTING_E ocDeglitchMode : 2;
+    uint8_t reserved1 : 1;
+    uint8_t ocReducedSafetyInterval : 1;
+    uint8_t reserved2 : 4;
+
+    uint8_t ocPinOpenDrainMode: 1;
+    OVERCURRENT_GAIN_CONTROL_SETTING_E oc1GainControl : 1;
+    OVERCURRENT_GAIN_CONTROL_SETTING_E oc2GainControl : 1;
+    OVERCURRENT_GAIN_CONTROL_SETTING_E oc3GainControl : 1;
+    OVERCURRENT_OUTPUT_SETTING_E ocOutputMode : 2;
+    uint8_t ocAOutputInverted : 1;
+    uint8_t ocBOutputInverted : 1;
+
+    PACK_ADC_DIAGNOSTIC_SETTING_E adcDiagnosticMode : 3;
+    uint8_t gpio2ConversionSignalEnable: 1;
+    uint8_t gpio1State : 1;
+    uint8_t gpio2State : 1;
+    uint8_t gpio3State : 1;
+    uint8_t gpio4State : 1;
+
 } ADBMS_ConfigBPackMonitor;
 
 typedef struct __attribute__((packed))
@@ -532,6 +604,15 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed))
 {
+    float overCurrentAdc1;
+    float overCurrentAdc2;
+    float overCurrentAdc3;
+    float overCurrentAdc3Max;
+    float overCurrentAdc3Min;
+} ADBMS_OvercurrentStatusPackMonitor;
+
+typedef struct __attribute__((packed))
+{
     ADBMS_ConfigAPackMonitor configGroupA;
     ADBMS_ConfigBPackMonitor configGroupB;
 
@@ -550,19 +631,18 @@ typedef struct __attribute__((packed))
     uint32_t currentAdcAccumulator1uV;
     uint32_t currentAdcAccumulator2uV;
 
-    uint32_t batteryVoltageAccumulator1;
-    uint32_t batteryVoltageAccumulator2;
+    uint32_t batteryVoltageAccumulator1uV;
+    uint32_t batteryVoltageAccumulator2uV;
 
-    float packVoltage[NUM_PACK_VOLTAGES];
-    float redundantPackVoltage[NUM_REDUNDANT_PACK_VOLTAGES];
+    float auxVoltage[NUM_PACK_AUX_VOLTAGES];
+    float redundantAuxVoltage[NUM_PACK_RD_AUX_VOLTAGES];
 
-    float overCurrentAdc1;
-    float overCurrentAdc2;
-    float overCurrentAdc3;
-    float overCurrentMaxAdc3;
-    float overCurrentMinAdc3;
+    float referenceVoltage;
+    float redundantReferenceVoltage;
 
-    uint8_t serialIdGroup[REGISTER_SIZE_BYTES];
+    ADBMS_OvercurrentStatusPackMonitor overcurrentStatusGroup;
+
+    uint8_t serialId[REGISTER_SIZE_BYTES];
 } ADBMS_PackMonitorData;
 
 typedef struct
@@ -582,113 +662,43 @@ void readyChain(ADBMS_BatteryData *adbmsData);
 
 TRANSACTION_STATUS_E checkChainStatus(ADBMS_BatteryData *adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E startCellConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_REDUNDANT_E redundantMode, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_FILTER_E filterMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E startRedundantCellConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_CONTINOUS_E continousMode, ADC_MODE_DISCHARGE_E dischargeMode, ADC_MODE_CELL_OPEN_WIRE_E openWireMode);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E startAuxConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel, ADC_MODE_AUX_OPEN_WIRE_E openWireMode);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E startRedundantAuxConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_AUX_CHANNEL_E auxChannel);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E startPackVoltageConversions(ADBMS_BatteryData *adbmsData, ADC_MODE_PACK_CHANNEL_E packChannel, ADC_MODE_PACK_OPEN_WIRE_E openWireMode);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E startPackAuxillaryConversions(ADBMS_BatteryData *adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
-TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData *adbmsData);
-
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData *adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData *adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData *adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E unfreezeRegisters(ADBMS_BatteryData *adbmsData);
 
-/**
- * @brief
- * @param chainInfo Chain data struct
- * @param
- * @return Transaction status error code
- */
 TRANSACTION_STATUS_E softReset(ADBMS_BatteryData *adbmsData);
-
-
-
 
 TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData *adbmsData);
 
 TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData *adbmsData);
 
+TRANSACTION_STATUS_E readSerialId(ADBMS_BatteryData *adbmsData);
 
+TRANSACTION_STATUS_E writePwmRegisters(ADBMS_BatteryData *adbmsData);
 
+TRANSACTION_STATUS_E readPwmRegisters(ADBMS_BatteryData *adbmsData);
 
-TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData *adbmsData);
+TRANSACTION_STATUS_E writeNVM(ADBMS_BatteryData  *adbmsData);
+
+TRANSACTION_STATUS_E readNVM(ADBMS_BatteryData *adbmsData);
+
+TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData * adbmsData);
 
 TRANSACTION_STATUS_E readConfigA(ADBMS_BatteryData *adbmsData);
 
@@ -696,7 +706,6 @@ TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData *adbmsData);
 
 TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData *adbmsData);
 
-// -
 TRANSACTION_STATUS_E readStatusA(ADBMS_BatteryData *adbmsData);
 
 TRANSACTION_STATUS_E readStatusB(ADBMS_BatteryData *adbmsData);
@@ -707,81 +716,12 @@ TRANSACTION_STATUS_E readStatusD(ADBMS_BatteryData *adbmsData);
 
 TRANSACTION_STATUS_E readStatusE(ADBMS_BatteryData *adbmsData);
 
+TRANSACTION_STATUS_E readCellVoltages(ADBMS_BatteryData *adbmsData, CELL_VOLTAGE_TYPE_E cellVoltageType);
 
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E writeNVM(CHAIN_INFO_S *chainInfo, uint8_t *writeData);
+TRANSACTION_STATUS_E readRedundantCellVoltages(ADBMS_BatteryData *adbmsData);
 
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readNVM(CHAIN_INFO_S *chainInfo, uint8_t *readData);
+TRANSACTION_STATUS_E readAuxVoltages(ADBMS_BatteryData * adbmsData);
 
-
-TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData *adbmsData);
-
-
-TRANSACTION_STATUS_E readConfigA(ADBMS_BatteryData *adbmsData);
-
-
-TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData *adbmsData);
-
-
-TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData *adbmsData);
-
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E writePwmRegisters(CHAIN_INFO_S *chainInfo, uint8_t *dischargeDutyCycle);
-
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readPwmRegisters(CHAIN_INFO_S *chainInfo, uint8_t *dischargeDutyCycle);
-
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readCellVoltages(CHAIN_INFO_S *chainInfo, float *cellVoltageArr, CELL_VOLTAGE_TYPE_E cellVoltageType);
-
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readAuxVoltages(CHAIN_INFO_S *chainInfo, ADBMS_AuxVoltageGroup *auxVoltageGroup, AUX_VOLTAGE_TYPE_E auxVoltageType);
-
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readStatus(CHAIN_INFO_S *chainInfo, ADBMS_StatusGroupCellMonitor *cellMonitorStatusGroup, ADBMS_StatusGroupPackMonitor *packMonitorStatusGroup);
-
-// /**
-//  * @brief
-//  * @param chainInfo Chain data struct
-//  * @param
-//  * @return Transaction status error code
-//  */
-// TRANSACTION_STATUS_E readSerialId(CHAIN_INFO_S *chainInfo, uint8_t *serialId);
+TRANSACTION_STATUS_E readRedundantAuxVoltages(ADBMS_BatteryData * adbmsData);
 
 #endif /* INC_ADBMS_H_ */
