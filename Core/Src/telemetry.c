@@ -14,20 +14,22 @@
 #define NUM_COMMAND_BLOCK_RETRYS            3
 
 /* ==================================================================== */
+/* ========================= ENUMERATED TYPES========================== */
+/* ==================================================================== */
+
+typedef enum
+{
+    MUX_STATE_0 = 0,
+    MUX_STATE_1,
+    NUM_MUX_STATES
+} MUX_STATE_E;
+
+/* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
 
-static ADBMS_BatteryData batteryData =
-{
-    .chainInfo.numDevs = NUM_DEVICES_IN_ACCUMULATOR,
-    .chainInfo.packMonitorPort = PORTA,
-    .chainInfo.chainStatus = CHAIN_COMPLETE,
-    .chainInfo.availableDevices[PORTA] = NUM_DEVICES_IN_ACCUMULATOR,
-    .chainInfo.availableDevices[PORTB] = NUM_DEVICES_IN_ACCUMULATOR,
-    .chainInfo.currentPort = PORTA,
-    .chainInfo.localCommandCounter[CELL_MONITOR] = 0,
-    .chainInfo.localCommandCounter[PACK_MONITOR] = 0
-};
+static ADBMS_BatteryData batteryData;
+static MUX_STATE_E tempMuxState;
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
@@ -70,33 +72,37 @@ TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
 {
     wakeChain(&batteryData);
 
-    TRANSACTION_STATUS_E status = muteDischarge(&batteryData);
+    TRANSACTION_STATUS_E status;
+
+    // Reset chain info struct to default values
+    batteryData.chainInfo.numDevs = NUM_DEVICES_IN_ACCUMULATOR;
+    batteryData.chainInfo.packMonitorPort = PORTA;
+    batteryData.chainInfo.chainStatus = CHAIN_COMPLETE;
+    batteryData.chainInfo.availableDevices[PORTA] = NUM_DEVICES_IN_ACCUMULATOR;
+    batteryData.chainInfo.availableDevices[PORTB] = NUM_DEVICES_IN_ACCUMULATOR;
+    batteryData.chainInfo.currentPort = PORTA;
+    batteryData.chainInfo.localCommandCounter[CELL_MONITOR] = 0;
+    batteryData.chainInfo.localCommandCounter[PACK_MONITOR] = 0;
+
+    status = readSerialId(&batteryData);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
     }
 
-    status = clearAllVoltageRegisters(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // TODO return error if 2 or 0 pack monitors found
+    if((batteryData.cellMonitor[NUM_CELL_MON_IN_ACCUMULATOR - 1].serialId[REGISTER_BYTE5] & DEVICE_ID_MASK) == PACK_MONITOR_ID)
     {
-        return status;
+        batteryData.chainInfo.packMonitorPort = PORTB;
     }
 
-    // Weird bug if this comes before clearAllVoltageRegisters
-    status = clearAllFlags(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    return startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, NO_FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
+    return readSerialId(&batteryData);
 }
 
-TRANSACTION_STATUS_E testBlock(telemetryTaskData_S *taskData)
+TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
 {
     readyChain(&batteryData);
 
-    // ISOSPI status variable
     TRANSACTION_STATUS_E status;
 
     status = checkChainStatus(&batteryData);
@@ -117,45 +123,12 @@ TRANSACTION_STATUS_E testBlock(telemetryTaskData_S *taskData)
         return status;
     }
 
-    status = muteDischarge(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
+    return readSerialId(&batteryData);
+}
 
-    status = startAuxConversions(&batteryData, AUX_ALL_CHANNELS, AUX_OPEN_WIRE_DISABLED);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    status = startPackAuxillaryConversions(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    // batteryData.packMonitor.configGroupA.v1Reference = ADVANCED_REF_V3;
-    // batteryData.packMonitor.configGroupA.v3Reference = BASIC_REF_1_25V;
-    // batteryData.packMonitor.configGroupA.v5Reference = BASIC_REF_1_25V;
-
-    // batteryData.cellMonitor[0].configGroupA.comparisonThreshold = COMPARE_THRESHOLD_10_mV;
-    // batteryData.cellMonitor[0].configGroupA.asserSingleTrimError = 1;
-    // batteryData.cellMonitor[0].configGroupA.soakTime = AUX_SOAK_TIME_262_MS;
-    // batteryData.cellMonitor[0].configGroupA.gpo6State = 1;
-    // batteryData.cellMonitor[0].configGroupA.digitalFilterSetting = FILTER_CUTOFF_45_HZ;
-
-    status = writeConfigA(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    status = readConfigA(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
+TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData)
+{
+    TRANSACTION_STATUS_E status;
 
     status = readStatusA(&batteryData);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
@@ -188,4 +161,154 @@ TRANSACTION_STATUS_E testBlock(telemetryTaskData_S *taskData)
     }
 
     return status;
+}
+
+TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
+{
+    TRANSACTION_STATUS_E status;
+
+    status = readCellVoltages(&batteryData, FILTERED_CELL_VOLTAGE);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    status = readAuxVoltages(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    tempMuxState++;
+    tempMuxState %= NUM_MUX_STATES;
+
+    for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+    {
+        batteryData.cellMonitor[i].configGroupA.gpo10State = tempMuxState;
+    }
+
+    status = writeConfigA(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    status = readConfigA(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    return status;
+}
+
+TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData)
+{
+    TRANSACTION_STATUS_E status;
+
+    status = readRedundantCellVoltages(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    status = readRedundantAuxVoltages(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    return status;
+}
+
+TRANSACTION_STATUS_E testBlock(telemetryTaskData_S *taskData)
+{
+    readyChain(&batteryData);
+
+    // ISOSPI status variable
+    TRANSACTION_STATUS_E status;
+
+    status = checkChainStatus(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    // status = startRedundantCellConversions(&batteryData, SINGLE_SHOT_MODE, DISCHARGE_DISABLED, CELL_OPEN_WIRE_DISABLED);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = startAuxConversions(&batteryData, AUX_ALL_CHANNELS, AUX_OPEN_WIRE_DISABLED);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = startRedundantAuxConversions(&batteryData, AUX_ALL_CHANNELS);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = startPackVoltageConversions(&batteryData, PACK_ALL_CHANNELS, PACK_OPEN_WIRE_DISABLED);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = startPackAuxillaryConversions(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = muteDischarge(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = unmuteDischarge(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = freezeRegisters(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = unfreezeRegisters(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = softReset(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+
+    // batteryData.cellMonitor[0].configGroupA.digitalFilterSetting = FILTER_CUTOFF_625_mHZ;
+
+    // status = writeConfigA(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    // status = readConfigA(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+
+    return readSerialId(&batteryData);
 }

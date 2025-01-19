@@ -31,7 +31,7 @@
 /* ========================= LOCAL VARIABLES ========================== */
 /* ==================================================================== */
 
-// const uint8_t bmbOrder[NUM_BMBS_IN_ACCUMULATOR] =
+// const uint8_t bmbOrder[NUM_CELL_MON_IN_ACCUMULATOR] =
 // {
 //     BMB0_SEGMENT_INDEX
 //     // BMB1_SEGMENT_INDEX
@@ -124,7 +124,7 @@
 
 //     for(int32_t i = 0; i < cellsInReg; i++)
 //     {
-//         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
+//         for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
 //         {
 //             float cellVoltage = CONVERT_VADC((bmbData + (j * REGISTER_SIZE_BYTES) + (i * CELL_REG_SIZE)));
 //             if(!diagnosticAdc)
@@ -151,7 +151,7 @@
 
 //     for(int32_t i = 0; i < cellsInReg; i++)
 //     {
-//         for(int32_t j = 0; j < NUM_BMBS_IN_ACCUMULATOR; j++)
+//         for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
 //         {
 //             float adcVoltage = CONVERT_VADC((bmbData + (j * REGISTER_SIZE_BYTES) + (i * CELL_REG_SIZE)));
 //             bmbArray[bmbOrder[j]].cellTemp[(cellStartIndex + (i * 2))] = lookup(adcVoltage, &cellTempTable);
@@ -192,8 +192,8 @@
 //     memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
 //     // Create and clear cell monitor data buffer
-//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR];
+//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR);
 
 //     TRANSACTION_STATUS_E status;
 
@@ -218,7 +218,7 @@
 
 //     // Clear RESET and SLEEP Bits
 //     packMonitorDataBuffer[REGISTER_BYTE5] = STATC_SLEEP_BIT;
-//     for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+//     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 //     {
 //         cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + REGISTER_BYTE5] = STATC_SLEEP_BIT;
 //     }
@@ -230,13 +230,13 @@
 //     }
 
 //     memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
-//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR);
 
 //     packMonitorDataBuffer[REGISTER_BYTE3] = ALL_PACK_MON_GPIO;
 //     packMonitorDataBuffer[REGISTER_BYTE4] = ALL_PACK_MON_GPIO;
 //     packMonitorDataBuffer[REGISTER_BYTE5] = ACCN_CTRL_BITS;
 
-//     for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+//     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 //     {
 //         cellMonitorDataBuffer[REGISTER_BYTE3] = ALL_CELL_MON_GPIO;
 //         cellMonitorDataBuffer[REGISTER_BYTE4] = GPIO9;
@@ -266,8 +266,8 @@
 //     memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
 //     // Create and clear cell monitor data buffer
-//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR];
+//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR);
 
 //     // ISOSPI status variable
 //     TRANSACTION_STATUS_E status;
@@ -302,7 +302,7 @@
 //     }
 
 //     // Check for the sleep bit to detect a power reset
-//     for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+//     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 //     {
 //         // Extract the sleep bit from each data packet, and check if it is set
 //         uint8_t statC5 = cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + REGISTER_BYTE5];
@@ -338,8 +338,8 @@
 //     memset(packMonitorDataBuffer, 0, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
 //     // Create and clear cell monitor data buffer
-//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR];
+//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR);
 
 //     TRANSACTION_STATUS_E status;
 
@@ -374,8 +374,8 @@
 //     memset(packMonitorDataBuffer, 0, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
 //     // Create and clear cell monitor data buffer
-//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR];
+//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR);
 
 //     TRANSACTION_STATUS_E status;
 
@@ -402,8 +402,8 @@
 //     memset(packMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_PACK_MON_IN_ACCUMULATOR);
 
 //     // Create and clear cell monitor data buffer
-//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR];
-//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_BMBS_IN_ACCUMULATOR);
+//     uint8_t cellMonitorDataBuffer[REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR];
+//     memset(cellMonitorDataBuffer, 0, REGISTER_SIZE_BYTES * NUM_CELL_MON_IN_ACCUMULATOR);
 
 //     TRANSACTION_STATUS_E status;
 
@@ -423,7 +423,7 @@
 //         convertCellTempRegister(cellMonitorDataBuffer, cellStartIndex, taskData->bmb);
 //     }
 
-//     for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+//     for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 //     {
 //         float adcVoltage = CONVERT_VADC((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (2 * CELL_REG_SIZE)));
 //         taskData->bmb[bmbOrder[i]].boardTemp = lookup(adcVoltage, &boardTempTable);
@@ -439,7 +439,7 @@
 //     packMonitorDataBuffer[REGISTER_BYTE4] = ALL_PACK_MON_GPIO;
 //     packMonitorDataBuffer[REGISTER_BYTE5] = ACCN_CTRL_BITS;
 
-//     for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+//     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 //     {
 //         cellMonitorDataBuffer[REGISTER_BYTE3] = ALL_CELL_MON_GPIO;
 //         cellMonitorDataBuffer[REGISTER_BYTE4] = GPIO9 | ((uint8_t)taskData->muxState << 1);
@@ -601,7 +601,7 @@
 
 // static void updateBmbStatistics(Bmb_S *bmb)
 // {
-// 	for(uint32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+// 	for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 // 	{
 // 		Bmb_S* pBmb = &bmb[i];
 // 		float maxCellVoltage = MIN_CELLV_SENSOR_VALUE;
@@ -694,7 +694,7 @@
 // 	float sumBoardTemp = 0.0f;
 //     uint32_t numGoodBoardTemp = 0;
 
-// 	for(int32_t i = 0; i < NUM_BMBS_IN_ACCUMULATOR; i++)
+// 	for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 // 	{
 // 		Bmb_S* pBmb = &taskData->bmb[i];
 
@@ -784,7 +784,7 @@ void initTelemetryTask()
 
     CHAIN_INFO_S defaultChainInfo = {
         .numDevs = NUM_DEVICES_IN_ACCUMULATOR,
-        .packMonitorPort = PACK_MONITOR_PORT,
+        .packMonitorPort = PORTA,
         .chainStatus = CHAIN_COMPLETE,
         .availableDevices[PORTA] = NUM_DEVICES_IN_ACCUMULATOR,
         .availableDevices[PORTB] = NUM_DEVICES_IN_ACCUMULATOR,

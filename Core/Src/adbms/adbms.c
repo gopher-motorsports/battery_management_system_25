@@ -197,22 +197,19 @@
 #define DTM_LONG_RANGE_MAX      1008
 #define DTM_LONG_RANGE_STEP     16
 
-
 #define PWM_CONFIG_SIZE_BITS    4
+#define PWM_CONFIG_SIZE_MASK    0x0F
 #define PWM_CONFIG_RANGE        15
-#define PWM_PERCENT_RANGE       100
-#define NUM_PWM_PER_BYTE        (BITS_IN_BYTE / PWM_CONFIG_SIZE_BITS)
+#define PWM_PERCENT_RANGE       100.0f
+#define PWM_SETTING_GAIN        (PWM_PERCENT_RANGE / PWM_CONFIG_RANGE)
+#define PWM_SETTING_OFFSET      0
 
 #define NUM_CELLS_PWM_A         12
 #define NUM_CELLS_PWM_B         4
 #define NUM_BYTES_PWM_B         ((NUM_CELLS_PWM_B * PWM_CONFIG_SIZE_BITS) / BITS_IN_BYTE)
 
-#define REGISTER_BYTE0      0
-#define REGISTER_BYTE1      1
-#define REGISTER_BYTE2      2
-#define REGISTER_BYTE3      3
-#define REGISTER_BYTE4      4
-#define REGISTER_BYTE5      5
+#define OVERCURRENT_GAIN1       5.0f
+#define OVERCURRENT_GAIN2       2.5f
 
 // Configuration register group A encoding
 #define REFON_BIT       7
@@ -243,11 +240,13 @@
 
 #define EXTRACT_24_BIT(buffer)                          (((uint32_t)buffer[2] << (2 * BITS_IN_BYTE)) | ((uint32_t)buffer[1] << (1 * BITS_IN_BYTE)) | ((uint32_t)buffer[0]))
 
-#define CONVERT_16_BIT_REGISTER(reg, gain, offset)    (((int16_t)(EXTRACT_16_BIT(reg)) * gain) + offset)
+#define CONVERT_SIGNED_12_BIT_REGISTER(reg, gain, offset)    (((((int16_t)(reg << 4)) / 16) * gain) + offset)
 
-#define CONVERT_24_BIT_REGISTER_UV(reg, gain)           ((((int32_t)(EXTRACT_24_BIT(reg) << BITS_IN_BYTE)) /  BYTE_SIZE_DEC) * gain)
+#define CONVERT_SIGNED_16_BIT_REGISTER(reg, gain, offset)    (((int16_t)(EXTRACT_16_BIT(reg)) * gain) + offset)
 
-#define CONVERT_FLOAT_TO_REGISTER(val, gain, offset)    (uint32_t)roundf((val - offset) / gain)
+#define CONVERT_SIGNED_24_BIT_REGISTER_UV(reg, gain)           ((((int32_t)(EXTRACT_24_BIT(reg) << BITS_IN_BYTE)) /  BYTE_SIZE_DEC) * gain)
+
+#define CONVERT_FLOAT_TO_REGISTER(val, gain, offset)    (int32_t)roundf((val - offset) / gain)
 
 /* ==================================================================== */
 /* ========================= LOCAL VARIABLES ========================== */
@@ -255,18 +254,26 @@
 
 static uint8_t transactionBuffer[MAX_SPI_BUFFER];
 
-const cellVoltageRegister[NUM_CELL_VOLTAGE_TYPES][NUM_CELLV_REGISTERS] =
+static const uint16_t cellVoltageCode[NUM_CELL_VOLTAGE_TYPES][NUM_CELLV_REGISTERS] =
 {
     {RDCVA, RDCVB, RDCVC, RDCVD, RDCVE, RDCVF},
     {RDACA, RDACB, RDACC, RDACD, RDACE, RDACF},
-    {RDFCA, RDFCB, RDFCC, RDFCD, RDFCE, RDFCF},
-    {RDSVA, RDSVB, RDSVC, RDSVD, RDSVE, RDSVF}
+    {RDFCA, RDFCB, RDFCC, RDFCD, RDFCE, RDFCF}
 };
 
-const auxVoltageRegister[NUM_AUX_VOLTAGE_TYPES][NUM_AUXV_REGISTERS] =
+static const uint16_t redundantCellVoltageCode[NUM_CELLV_REGISTERS] =
 {
-    {RDAUXA, RDAUXB, RDAUXC, RDAUXD},
-    {RDRAXA, RDRAXB, RDRAXC, RDRAXD}
+    RDSVA, RDSVB, RDSVC, RDSVD, RDSVE, RDSVF
+};
+
+static const uint16_t auxVoltageCode[NUM_AUXV_REGISTERS] =
+{
+    RDAUXA, RDAUXB, RDAUXC, RDAUXD
+};
+
+static const uint16_t redundantAuxVoltageCode[NUM_AUXV_REGISTERS] =
+{
+    RDAUXA, RDAUXB, RDAUXC, RDAUXD
 };
 
 /* ==================================================================== */
@@ -350,7 +357,7 @@ TRANSACTION_STATUS_E muteDischarge(ADBMS_BatteryData *adbmsData)
 
 TRANSACTION_STATUS_E unmuteDischarge(ADBMS_BatteryData *adbmsData)
 {
-    return commandChain(UNMUTE, &adbmsData->chainInfo, SHARED_COMMAND);
+    return commandChain(UNMUTE, &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
 }
 
 TRANSACTION_STATUS_E freezeRegisters(ADBMS_BatteryData *adbmsData)
@@ -367,9 +374,6 @@ TRANSACTION_STATUS_E softReset(ADBMS_BatteryData *adbmsData)
 {
     return commandChain(SRST, &adbmsData->chainInfo, SHARED_COMMAND);
 }
-
-
-
 
 TRANSACTION_STATUS_E clearAllVoltageRegisters(ADBMS_BatteryData *adbmsData)
 {
@@ -410,159 +414,231 @@ TRANSACTION_STATUS_E clearAllFlags(ADBMS_BatteryData *adbmsData)
         return status;
     }
 
-    return writeChain(CLOVUV, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
+    status = writeChain(CLOVUV, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    readyChain(adbmsData);
+
+    return status;
 }
 
+TRANSACTION_STATUS_E readSerialId(ADBMS_BatteryData *adbmsData)
+{
+    memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
+    TRANSACTION_STATUS_E status = readChain(RDSID, &adbmsData->chainInfo, transactionBuffer);
 
+    uint8_t *packMonitorDataBuffer;
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        packMonitorDataBuffer = transactionBuffer;
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+        packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
+    }
 
+    memcpy(&adbmsData->packMonitor.serialId, packMonitorDataBuffer, REGISTER_SIZE_BYTES);
 
-// TRANSACTION_STATUS_E writePwmRegisters(ADBMS_BatteryData * adbmsData)
-// {
-//     uint8_t *cellMonitorDataBuffer;
-//     if(adbmsData->chainInfo.packMonitorPort == PORTA)
-//     {
-//         cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
-//     }
-//     else
-//     {
-//         cellMonitorDataBuffer = transactionBuffer;
-//     }
+    for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
+    {
+        memcpy(&adbmsData->cellMonitor[i].serialId, cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), REGISTER_BYTE5);
+    }
 
-//     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
-//     {
-//         for(uint32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
-//         {
-//             uint8_t pwmSetting0 = SCALE_TO_RANGE(adbmsData->cellMonitor[i].dischargePWM[j * 2], PWM_PERCENT_RANGE, PWM_CONFIG_RANGE);
-//             uint8_t pwmSetting1 = SCALE_TO_RANGE(adbmsData->cellMonitor[i].dischargePWM[(j * 2) + 1], PWM_PERCENT_RANGE, PWM_CONFIG_RANGE);
+    return status;
+}
 
-//             cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] = ((pwmSetting1 << PWM_CONFIG_SIZE_BITS) | pwmSetting0);
-//         }
-//     }
+TRANSACTION_STATUS_E writePwmRegisters(ADBMS_BatteryData *adbmsData)
+{
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+    }
 
-//     TRANSACTION_STATUS_E status = writeChain(WRPWMA, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+    for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
+    {
+        for(uint32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
+        {
+            float pwm0 = adbmsData->cellMonitor[i].dischargePWM[j * 2];
+            float pwm1 = adbmsData->cellMonitor[i].dischargePWM[(j * 2) + 1];
 
-//     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
-//     {
-//         for(uint32_t j = 0; j < NUM_BYTES_PWM_B; j++)
-//         {
-//             uint8_t pwmSetting0 = SCALE_TO_RANGE(adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2)], PWM_PERCENT_RANGE, PWM_CONFIG_RANGE);
-//             uint8_t pwmSetting1 = SCALE_TO_RANGE(adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2) + 1], PWM_PERCENT_RANGE, PWM_CONFIG_RANGE);
+            if(pwm0 < 0.0f)
+            {
+                pwm0 = 0.0f;
+            }
+            else if(pwm0 > PWM_PERCENT_RANGE)
+            {
+                pwm0 = PWM_PERCENT_RANGE;
+            }
 
-//             cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] = ((pwmSetting1 << PWM_CONFIG_SIZE_BITS) | pwmSetting0);
-//         }
-//     }
+            if(pwm1 < 0.0f)
+            {
+                pwm1 = 0.0f;
+            }
+            else if(pwm1 > PWM_PERCENT_RANGE)
+            {
+                pwm1 = PWM_PERCENT_RANGE;
+            }
 
-//     return writeChain(WRPWMB, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
-// }
+            uint8_t pwmSetting0 = CONVERT_FLOAT_TO_REGISTER(pwm0, PWM_SETTING_GAIN, PWM_SETTING_OFFSET);
+            uint8_t pwmSetting1 = CONVERT_FLOAT_TO_REGISTER(pwm1, PWM_SETTING_GAIN, PWM_SETTING_OFFSET);
 
-// TRANSACTION_STATUS_E readPwmRegisters(ADBMS_BatteryData * adbmsData)
-// {
-//     uint8_t *cellMonitorDataBuffer;
-//     if(adbmsData->chainInfo.packMonitorPort == PORTA)
-//     {
-//         cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
-//     }
-//     else
-//     {
-//         cellMonitorDataBuffer = transactionBuffer;
-//     }
+            cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] = ((pwmSetting1 << PWM_CONFIG_SIZE_BITS) | pwmSetting0);
+        }
+    }
 
-//     TRANSACTION_STATUS_E status = readChain(RDPWMA, &adbmsData->chainInfo, transactionBuffer);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+    TRANSACTION_STATUS_E status = writeChain(WRPWMA, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-//     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
-//     {
-//         for(uint32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
-//         {
-//             uint8_t pwmSetting0 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] & 0x0F);
-//             uint8_t pwmSetting1 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] >> PWM_CONFIG_SIZE_BITS);
+    for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
+    {
+        for(uint32_t j = 0; j < NUM_BYTES_PWM_B; j++)
+        {
+            float pwm0 = adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2)];
+            float pwm1 = adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2) + 1];
 
-//             adbmsData->cellMonitor[i].dischargePWM[j * 2] = SCALE_TO_RANGE(pwmSetting0, PWM_CONFIG_RANGE, PWM_PERCENT_RANGE);
-//             adbmsData->cellMonitor[i].dischargePWM[(j * 2) + 1] = SCALE_TO_RANGE(pwmSetting1, PWM_CONFIG_RANGE, PWM_PERCENT_RANGE);
-//         }
-//     }
+            if(pwm0 < 0.0f)
+            {
+                pwm0 = 0.0f;
+            }
+            else if(pwm0 > PWM_PERCENT_RANGE)
+            {
+                pwm0 = PWM_PERCENT_RANGE;
+            }
 
-//     status = readChain(RDPWMB, &adbmsData->chainInfo, transactionBuffer);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+            if(pwm1 < 0.0f)
+            {
+                pwm1 = 0.0f;
+            }
+            else if(pwm1 > PWM_PERCENT_RANGE)
+            {
+                pwm1 = PWM_PERCENT_RANGE;
+            }
 
-//     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
-//     {
-//         for(uint32_t j = 0; j < NUM_BYTES_PWM_B; j++)
-//         {
-//             uint8_t pwmSetting0 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] & 0x0F);
-//             uint8_t pwmSetting1 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] >> PWM_CONFIG_SIZE_BITS);
+            uint8_t pwmSetting0 = CONVERT_FLOAT_TO_REGISTER(pwm0, PWM_SETTING_GAIN, PWM_SETTING_OFFSET);
+            uint8_t pwmSetting1 = CONVERT_FLOAT_TO_REGISTER(pwm1, PWM_SETTING_GAIN, PWM_SETTING_OFFSET);
 
-//             adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2)] = SCALE_TO_RANGE(pwmSetting0, PWM_CONFIG_RANGE, PWM_PERCENT_RANGE);
-//             adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2) + 1] = SCALE_TO_RANGE(pwmSetting1, PWM_CONFIG_RANGE, PWM_PERCENT_RANGE);
-//         }
-//     }
+            cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] = ((pwmSetting1 << PWM_CONFIG_SIZE_BITS) | pwmSetting0);
+        }
+    }
 
-//     return status;
-// }
+    return writeChain(WRPWMB, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
+}
+
+TRANSACTION_STATUS_E readPwmRegisters(ADBMS_BatteryData *adbmsData)
+{
+    memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
+
+    TRANSACTION_STATUS_E status = readChain(RDPWMA, &adbmsData->chainInfo, transactionBuffer);
+
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+    }
+
+    for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
+    {
+        for(uint32_t j = 0; j < REGISTER_SIZE_BYTES; j++)
+        {
+            uint8_t pwmSetting0 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] & PWM_CONFIG_SIZE_MASK);
+            uint8_t pwmSetting1 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] >> PWM_CONFIG_SIZE_BITS);
+
+            adbmsData->cellMonitor[i].dischargePWM[j * 2] = pwmSetting0 * PWM_SETTING_GAIN;
+            adbmsData->cellMonitor[i].dischargePWM[(j * 2) + 1] = pwmSetting1 * PWM_SETTING_GAIN;
+        }
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = readChain(RDPWMB, &adbmsData->chainInfo, transactionBuffer);
+    }
+
+    for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
+    {
+        for(uint32_t j = 0; j < NUM_BYTES_PWM_B; j++)
+        {
+            uint8_t pwmSetting0 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] & PWM_CONFIG_SIZE_MASK);
+            uint8_t pwmSetting1 = (cellMonitorDataBuffer[(i * REGISTER_SIZE_BYTES) + j] >> PWM_CONFIG_SIZE_BITS);
+
+            adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2)] = pwmSetting0 * PWM_SETTING_GAIN;
+            adbmsData->cellMonitor[i].dischargePWM[NUM_CELLS_PWM_A + (j * 2) + 1] = pwmSetting1 * PWM_SETTING_GAIN;
+        }
+    }
+
+    return status;
+}
 
 
 // TODO Test if write works through Pack Monitor
 // Make sure followed with read to check data and lock register
-// TRANSACTION_STATUS_E writeNVM(ADBMS_BatteryData * adbmsData)
-// {
-//     TRANSACTION_STATUS_E status = commandChain(ULRR, &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+TRANSACTION_STATUS_E writeNVM(ADBMS_BatteryData  *adbmsData)
+{
+    TRANSACTION_STATUS_E status = commandChain(ULRR, &adbmsData->chainInfo, CELL_MONITOR_COMMAND);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
 
-//     uint8_t *cellMonitorDataBuffer;
-//     if(adbmsData->chainInfo.packMonitorPort == PORTA)
-//     {
-//         cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
-//     }
-//     else
-//     {
-//         cellMonitorDataBuffer = transactionBuffer;
-//     }
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+    }
 
-//     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
-//     {
-//         memcpy(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), adbmsData->cellMonitor[i].retentionRegister, REGISTER_SIZE_BYTES);
-//     }
+    for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
+    {
+        memcpy(cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), adbmsData->cellMonitor[i].retentionRegister, REGISTER_SIZE_BYTES);
+    }
 
-//     return writeChain(WRRR, &adbmsData->chainInfo, CELL_MONITOR_COMMAND, transactionBuffer);
-// }
+    return writeChain(WRRR, &adbmsData->chainInfo, SHARED_COMMAND, transactionBuffer);
+}
 
-// TRANSACTION_STATUS_E readNVM(ADBMS_BatteryData * adbmsData, uint8_t *readData)
-// {
-//     uint8_t *cellMonitorDataBuffer;
-//     if(adbmsData->chainInfo.packMonitorPort == PORTA)
-//     {
-//         cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
-//     }
-//     else
-//     {
-//         cellMonitorDataBuffer = transactionBuffer;
-//     }
+TRANSACTION_STATUS_E readNVM(ADBMS_BatteryData *adbmsData)
+{
+    memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
-//     TRANSACTION_STATUS_E status = readChain(RDRR, &adbmsData->chainInfo, transactionBuffer);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+    TRANSACTION_STATUS_E status = readChain(RDRR, &adbmsData->chainInfo, transactionBuffer);
 
-//     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
-//     {
-//         memcpy(adbmsData->cellMonitor[i].retentionRegister, cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
-//     }
-// }
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+    }
+
+    for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
+    {
+        memcpy(adbmsData->cellMonitor[i].retentionRegister, cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES), REGISTER_SIZE_BYTES);
+    }
+
+    return status;
+}
 
 TRANSACTION_STATUS_E writeConfigA(ADBMS_BatteryData * adbmsData)
 {
@@ -660,8 +736,8 @@ TRANSACTION_STATUS_E writeConfigB(ADBMS_BatteryData *adbmsData)
             overVoltageThresh = MAX_OV_UV_VALUE;
         }
 
-        uint16_t underVoltageSetting = CONVERT_FLOAT_TO_REGISTER(underVoltageThresh, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET) & CELL_OV_UV_MASK;
-        uint16_t overVoltageSetting = CONVERT_FLOAT_TO_REGISTER(overVoltageThresh, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET) & CELL_OV_UV_MASK;
+        uint32_t underVoltageSetting = CONVERT_FLOAT_TO_REGISTER(underVoltageThresh, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET) & CELL_OV_UV_MASK;
+        uint32_t overVoltageSetting = CONVERT_FLOAT_TO_REGISTER(overVoltageThresh, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET) & CELL_OV_UV_MASK;
         uint32_t cellThresholdSettings = underVoltageSetting | (overVoltageSetting << CELL_OV_UV_BITS);
 
         deviceRegister[REGISTER_BYTE0] = (uint8_t)(cellThresholdSettings);
@@ -738,8 +814,8 @@ TRANSACTION_STATUS_E readConfigB(ADBMS_BatteryData *adbmsData)
         uint16_t underVoltageSetting = cellThresholdSettings & CELL_OV_UV_MASK;
         uint16_t overVoltageSetting = cellThresholdSettings >> CELL_OV_UV_BITS;
 
-        adbmsData->cellMonitor[i].configGroupB.undervoltageThreshold = (underVoltageSetting * CELL_MON_OV_UV_GAIN) + CELL_MON_OV_UV_OFFSET;
-        adbmsData->cellMonitor[i].configGroupB.overvoltageThreshold = (overVoltageSetting * CELL_MON_OV_UV_GAIN) + CELL_MON_OV_UV_OFFSET;
+        adbmsData->cellMonitor[i].configGroupB.undervoltageThreshold = CONVERT_SIGNED_12_BIT_REGISTER(underVoltageSetting, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET);
+        adbmsData->cellMonitor[i].configGroupB.overvoltageThreshold = CONVERT_SIGNED_12_BIT_REGISTER(overVoltageSetting, CELL_MON_OV_UV_GAIN, CELL_MON_OV_UV_OFFSET);
 
         uint8_t dischargeTimerSetting = deviceRegister[REGISTER_BYTE3];
 
@@ -789,14 +865,14 @@ TRANSACTION_STATUS_E readStatusA(ADBMS_BatteryData *adbmsData)
         packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
     }
 
-    adbmsData->packMonitor.statusGroupA.referenceVoltage1P25 = CONVERT_16_BIT_REGISTER(packMonitorDataBuffer, PACK_MON_VREF1P25_GAIN, PACK_MON_VREF1P25_OFFSET);
-    adbmsData->packMonitor.statusGroupA.dieTemp1 = CONVERT_16_BIT_REGISTER((packMonitorDataBuffer + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_DIE_TEMP1_GAIN, PACK_MON_DIE_TEMP1_OFFSET);
-    adbmsData->packMonitor.statusGroupA.regulatorVoltage = CONVERT_16_BIT_REGISTER((packMonitorDataBuffer + (2 * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VREG_GAIN, PACK_MON_VREG_OFFSET);
+    adbmsData->packMonitor.statusGroupA.referenceVoltage1P25 = CONVERT_SIGNED_16_BIT_REGISTER(packMonitorDataBuffer, PACK_MON_VREF1P25_GAIN, PACK_MON_VREF1P25_OFFSET);
+    adbmsData->packMonitor.statusGroupA.dieTemp1 = CONVERT_SIGNED_16_BIT_REGISTER((packMonitorDataBuffer + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_DIE_TEMP1_GAIN, PACK_MON_DIE_TEMP1_OFFSET);
+    adbmsData->packMonitor.statusGroupA.regulatorVoltage = CONVERT_SIGNED_16_BIT_REGISTER((packMonitorDataBuffer + (2 * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VREG_GAIN, PACK_MON_VREG_OFFSET);
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        adbmsData->cellMonitor[i].statusGroupA.referenceVoltage = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
-        adbmsData->cellMonitor[i].statusGroupA.dieTemp = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_DIE_TEMP_GAIN, CELL_MON_DIE_TEMP_OFFSET);
+        adbmsData->cellMonitor[i].statusGroupA.referenceVoltage = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+        adbmsData->cellMonitor[i].statusGroupA.dieTemp = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_DIE_TEMP_GAIN, CELL_MON_DIE_TEMP_OFFSET);
     }
 
     return status;
@@ -821,15 +897,15 @@ TRANSACTION_STATUS_E readStatusB(ADBMS_BatteryData *adbmsData)
         packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
     }
 
-    adbmsData->packMonitor.statusGroupB.supplyVoltage = CONVERT_16_BIT_REGISTER(packMonitorDataBuffer, PACK_MON_VDD_GAIN, PACK_MON_VDD_OFFSET);
-    adbmsData->packMonitor.statusGroupB.digitalSupplyVoltage = CONVERT_16_BIT_REGISTER((packMonitorDataBuffer + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VDIG_GAIN, PACK_MON_VDIG_OFFSET);
-    adbmsData->packMonitor.statusGroupB.groundPadVoltage = CONVERT_16_BIT_REGISTER((packMonitorDataBuffer + (2 * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_EPAD_GAIN, PACK_MON_EPAD_OFFSET);
+    adbmsData->packMonitor.statusGroupB.supplyVoltage = CONVERT_SIGNED_16_BIT_REGISTER(packMonitorDataBuffer, PACK_MON_VDD_GAIN, PACK_MON_VDD_OFFSET);
+    adbmsData->packMonitor.statusGroupB.digitalSupplyVoltage = CONVERT_SIGNED_16_BIT_REGISTER((packMonitorDataBuffer + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VDIG_GAIN, PACK_MON_VDIG_OFFSET);
+    adbmsData->packMonitor.statusGroupB.groundPadVoltage = CONVERT_SIGNED_16_BIT_REGISTER((packMonitorDataBuffer + (2 * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_EPAD_GAIN, PACK_MON_EPAD_OFFSET);
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
     {
-        adbmsData->cellMonitor[i].statusGroupB.digitalSupplyVoltage = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
-        adbmsData->cellMonitor[i].statusGroupB.analogSupplyVoltage = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
-        adbmsData->cellMonitor[i].statusGroupB.referenceResistorVoltage = CONVERT_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (2 * VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+        adbmsData->cellMonitor[i].statusGroupB.digitalSupplyVoltage = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+        adbmsData->cellMonitor[i].statusGroupB.analogSupplyVoltage = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+        adbmsData->cellMonitor[i].statusGroupB.referenceResistorVoltage = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (i * REGISTER_SIZE_BYTES) + (2 * VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
     }
 
     return status;
@@ -896,8 +972,8 @@ TRANSACTION_STATUS_E readStatusD(ADBMS_BatteryData *adbmsData)
         packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
     }
 
-    adbmsData->packMonitor.statusGroupD.referenceResistorVoltage = CONVERT_16_BIT_REGISTER(packMonitorDataBuffer, PACK_MON_VDIV_GAIN, PACK_MON_VDIV_OFFSET);
-    adbmsData->packMonitor.statusGroupD.dieTemp2 = CONVERT_16_BIT_REGISTER((packMonitorDataBuffer + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_DIE_TEMP2_GAIN, PACK_MON_DIE_TEMP2_OFFSET);
+    adbmsData->packMonitor.statusGroupD.referenceResistorVoltage = CONVERT_SIGNED_16_BIT_REGISTER(packMonitorDataBuffer, PACK_MON_VDIV_GAIN, PACK_MON_VDIV_OFFSET);
+    adbmsData->packMonitor.statusGroupD.dieTemp2 = CONVERT_SIGNED_16_BIT_REGISTER((packMonitorDataBuffer + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_DIE_TEMP2_GAIN, PACK_MON_DIE_TEMP2_OFFSET);
     adbmsData->packMonitor.statusGroupD.oscillatorCounter = packMonitorDataBuffer[REGISTER_BYTE5];
 
     for(uint32_t i = 0; i < (adbmsData->chainInfo.numDevs - 1); i++)
@@ -952,135 +1028,302 @@ TRANSACTION_STATUS_E readStatusE(ADBMS_BatteryData *adbmsData)
     return status;
 }
 
-// TRANSACTION_STATUS_E readCellVoltages(ADBMS_BatteryData * adbmsData, CELL_VOLTAGE_TYPE_E cellVoltageType)
-// {
-//     uint8_t *packMonitorDataBuffer;
-//     uint8_t *cellMonitorDataBuffer;
-//     if(adbmsData->chainInfo.packMonitorPort == PORTA)
-//     {
-//         packMonitorDataBuffer = transactionBuffer;
-//         cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
-//     }
-//     else
-//     {
-//         cellMonitorDataBuffer = transactionBuffer;
-//         packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
-//     }
+TRANSACTION_STATUS_E readCellVoltages(ADBMS_BatteryData *adbmsData, CELL_VOLTAGE_TYPE_E cellVoltageType)
+{
+    memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
 
-//     TRANSACTION_STATUS_E status;
-//     for(uint32_t i = 0; i < (NUM_CELLV_REGISTERS - 1); i++)
-//     {
-//         status = readChain(cellVoltageRegister[cellVoltageType][i], &adbmsData->chainInfo, transactionBuffer);
-//         if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//         {
-//             return status;
-//         }
+    uint8_t packRegisterData[NUM_CELLV_REGISTERS][REGISTER_SIZE_BYTES];
+    memset(packRegisterData, 0x00, NUM_CELLV_REGISTERS * REGISTER_SIZE_BYTES);
 
-//         memcpy(packMonitorTempBuffer[i], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+    uint8_t *packMonitorDataBuffer;
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        packMonitorDataBuffer = transactionBuffer;
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+        packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
+    }
 
-//         for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
-//         {
-//             for(uint32_t k = 0; k < CELLS_PER_REG; k++)
-//             {
-//                 adbmsData->cellMonitor[j].cellVoltage[(i * CELLS_PER_REG) + k] = CONVERT_CELL_ADC_V((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (k * CELL_REG_SIZE)));
-//             }
-//         }
-//     }
+    TRANSACTION_STATUS_E status = TRANSACTION_SUCCESS;
+    for(uint32_t i = 0; i < (NUM_CELLV_REGISTERS - 1); i++)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readChain(cellVoltageCode[cellVoltageType][i], &adbmsData->chainInfo, transactionBuffer);
+        }
 
-//     status = readChain(cellVoltageRegister[cellVoltageType][NUM_CELLV_REGISTERS - 1], &adbmsData->chainInfo, transactionBuffer);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+        memcpy(packRegisterData[i], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
 
-//     memcpy(packMonitorTempBuffer[NUM_CELLV_REGISTERS - 1], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+        for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+        {
+            for(uint32_t k = 0; k < VOLTAGE_16BIT_PER_REG; k++)
+            {
+                adbmsData->cellMonitor[j].cellVoltage[(i * VOLTAGE_16BIT_PER_REG) + k] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (k * VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_CELL_ADC_GAIN, CELL_MON_CELL_ADC_OFFSET);
+            }
+        }
+    }
 
-//     for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
-//     {
-//         adbmsData->cellMonitor[j].cellVoltage[(NUM_CELLV_REGISTERS - 1) * CELLS_PER_REG] = CONVERT_CELL_ADC_V((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES)));
-//     }
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = readChain(cellVoltageCode[cellVoltageType][NUM_CELLV_REGISTERS - 1], &adbmsData->chainInfo, transactionBuffer);
+    }
 
-//     switch (cellVoltageType)
-//     {
-//         case RAW_CELL_VOLTAGE:
-//         case FILTERED_CELL_VOLTAGE:
-//             break;
+    memcpy(packRegisterData[NUM_CELLV_REGISTERS - 1], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
 
-//         case AVERAGED_CELL_VOLTAGE:
-//             /* code */
-//             break;
+    for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+    {
+        adbmsData->cellMonitor[j].cellVoltage[(NUM_CELLV_REGISTERS - 1) * VOLTAGE_16BIT_PER_REG] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES)), CELL_MON_CELL_ADC_GAIN, CELL_MON_CELL_ADC_OFFSET);
+    }
 
-//         case REDUNDANT_CELL_VOLTAGE:
-//             /* code */
-//             break;
+    // Buffer[3] and Buffer[4] hold aux voltages 1-6
+    for(uint32_t i = 0; i < VOLTAGE_16BIT_PER_REG; i++)
+    {
+        adbmsData->packMonitor.auxVoltage[i] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[3] + (i * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC1_GAIN, PACK_MON_VADC1_OFFSET);
+        adbmsData->packMonitor.auxVoltage[(i + VOLTAGE_16BIT_PER_REG)] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[4] + (i * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC1_GAIN, PACK_MON_VADC1_OFFSET);
+    }
 
-//         default:
-//             break;
-//     }
+    if(cellVoltageType == AVERAGED_CELL_VOLTAGE)
+    {
+        memcpy(packRegisterData[3], packRegisterData[0], REGISTER_SIZE_BYTES);
+        memcpy(packRegisterData[4], packRegisterData[1], REGISTER_SIZE_BYTES);
 
-//     return status;
-// }
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readPackMonitor(RDCVA, &adbmsData->chainInfo, packRegisterData[0]);
+        }
 
-// TRANSACTION_STATUS_E readAuxVoltages(ADBMS_BatteryData * adbmsData, AUX_VOLTAGE_TYPE_E auxVoltageType)
-// {
-//     uint8_t *packMonitorDataBuffer;
-//     uint8_t *cellMonitorDataBuffer;
-//     if(adbmsData->chainInfo.packMonitorPort == PORTA)
-//     {
-//         packMonitorDataBuffer = transactionBuffer;
-//         cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
-//     }
-//     else
-//     {
-//         cellMonitorDataBuffer = transactionBuffer;
-//         packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
-//     }
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readPackMonitor(RDCVB, &adbmsData->chainInfo, packRegisterData[1]);
+        }
 
-//     TRANSACTION_STATUS_E status;
-//     for(uint32_t i = 0; i < (NUM_AUXV_REGISTERS - 1); i++)
-//     {
-//         status = readChain(auxVoltageRegister[auxVoltageType][i], &adbmsData->chainInfo, transactionBuffer);
-//         if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//         {
-//             return status;
-//         }
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readPackMonitor(RDCVF, &adbmsData->chainInfo, packRegisterData[5]);
+        }
+    }
+    else
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readPackMonitor(RDACA, &adbmsData->chainInfo, packRegisterData[3]);
+        }
 
-//         memcpy(packMonitorTempBuffer[i], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readPackMonitor(RDACB, &adbmsData->chainInfo, packRegisterData[4]);
+        }
+    }
 
-//         for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
-//         {
-//             for(uint32_t k = 0; k < CELLS_PER_REG; k++)
-//             {
-//                 adbmsData->cellMonitor[j].auxVoltage[(i * CELLS_PER_REG) + k] = CONVERT_AUX_ADC_V((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (k * CELL_REG_SIZE)));
-//             }
-//         }
-//     }
+    // Buffer[0] holds IADC1 and IADC2 data
+    adbmsData->packMonitor.currentAdc1uV = CONVERT_SIGNED_24_BIT_REGISTER_UV(packRegisterData[0], PACK_MON_IADC1_GAIN_UV);
+    adbmsData->packMonitor.currentAdc2uV = CONVERT_SIGNED_24_BIT_REGISTER_UV((packRegisterData[0] + VOLTAGE_24BIT_SIZE_BYTES), PACK_MON_IADC2_GAIN_UV);
 
-//     status = readChain(auxVoltageRegister[auxVoltageType][NUM_AUXV_REGISTERS - 1], &adbmsData->chainInfo, transactionBuffer);
-//     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-//     {
-//         return status;
-//     }
+    // Buffer[1] holds VBADC1 and VBADC2 data
+    adbmsData->packMonitor.batteryVoltage1 = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[1] + VOLTAGE_16BIT_SIZE_BYTES), PACK_MON_VADC1_GAIN, PACK_MON_VADC1_OFFSET);
+    adbmsData->packMonitor.batteryVoltage2 = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[1] + (2 * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC2_GAIN, PACK_MON_VADC2_OFFSET);
 
-//     memcpy(packMonitorTempBuffer[NUM_AUXV_REGISTERS - 1], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+    // Buffer[3] holds IACC1 and IACC2 data
+    adbmsData->packMonitor.currentAdcAccumulator1uV = CONVERT_SIGNED_24_BIT_REGISTER_UV(packRegisterData[3], PACK_MON_IADC1_GAIN_UV);
+    adbmsData->packMonitor.currentAdcAccumulator2uV = CONVERT_SIGNED_24_BIT_REGISTER_UV((packRegisterData[3] + VOLTAGE_24BIT_SIZE_BYTES), PACK_MON_IADC2_GAIN_UV);
 
-//     for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
-//     {
-//         adbmsData->cellMonitor[j].cellVoltage[(NUM_AUXV_REGISTERS - 1) * CELLS_PER_REG] = CONVERT_AUX_ADC_V((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES)));
-//     }
+    // Buffer[4] holds VBACC1 and VBACC2 data
+    adbmsData->packMonitor.batteryVoltageAccumulator1uV = CONVERT_SIGNED_24_BIT_REGISTER_UV(packRegisterData[4], PACK_MON_VACC1_GAIN_UV);
+    adbmsData->packMonitor.batteryVoltageAccumulator2uV = CONVERT_SIGNED_24_BIT_REGISTER_UV((packRegisterData[4] + VOLTAGE_24BIT_SIZE_BYTES), PACK_MON_VACC2_GAIN_UV);
 
-//     switch (auxVoltageType)
-//     {
-//         case AUX_VOLTAGES:
-//             break;
+    // Buffer[5] hold overcurrent ADC data
+    float oc1Gain = (adbmsData->packMonitor.configGroupB.oc1GainControl) ? (OVERCURRENT_GAIN2) : (OVERCURRENT_GAIN1);
+    float oc2Gain = (adbmsData->packMonitor.configGroupB.oc2GainControl) ? (OVERCURRENT_GAIN2) : (OVERCURRENT_GAIN1);
+    float oc3Gain = (adbmsData->packMonitor.configGroupB.oc3GainControl) ? (OVERCURRENT_GAIN2) : (OVERCURRENT_GAIN1);
 
-//         case REDUNDANT_AUX_VOLTAGES:
-//             /* code */
-//             break;
+    adbmsData->packMonitor.overcurrentStatusGroup.overCurrentAdc1 = packRegisterData[5][REGISTER_BYTE0] * oc1Gain;
+    adbmsData->packMonitor.overcurrentStatusGroup.overCurrentAdc2 = packRegisterData[5][REGISTER_BYTE1] * oc2Gain;
+    adbmsData->packMonitor.overcurrentStatusGroup.overCurrentAdc3 = packRegisterData[5][REGISTER_BYTE2] * oc3Gain;
+    adbmsData->packMonitor.overcurrentStatusGroup.overCurrentAdc3Max = packRegisterData[5][REGISTER_BYTE4] * oc3Gain;
+    adbmsData->packMonitor.overcurrentStatusGroup.overCurrentAdc3Min = packRegisterData[5][REGISTER_BYTE5] * oc3Gain;
 
-//         default:
-//             break;
-//     }
+    return status;
+}
 
-//     return status;
-// }
+TRANSACTION_STATUS_E readRedundantCellVoltages(ADBMS_BatteryData *adbmsData)
+{
+    memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
+
+    uint8_t *packMonitorDataBuffer;
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        packMonitorDataBuffer = transactionBuffer;
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+        packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
+    }
+
+    TRANSACTION_STATUS_E status = TRANSACTION_SUCCESS;
+    for(uint32_t i = 0; i < (NUM_CELLV_REGISTERS - 1); i++)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readChain(redundantAuxVoltageCode[i], &adbmsData->chainInfo, transactionBuffer);
+        }
+
+        for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+        {
+            for(uint32_t k = 0; k < VOLTAGE_16BIT_PER_REG; k++)
+            {
+                adbmsData->cellMonitor[j].redundantCellVoltage[(i * VOLTAGE_16BIT_PER_REG) + k] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (k * VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_CELL_ADC_GAIN, CELL_MON_CELL_ADC_OFFSET);
+            }
+        }
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = readChain(redundantAuxVoltageCode[NUM_CELLV_REGISTERS - 1], &adbmsData->chainInfo, transactionBuffer);
+    }
+
+    for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+    {
+        adbmsData->cellMonitor[j].redundantCellVoltage[(NUM_CELLV_REGISTERS - 1) * VOLTAGE_16BIT_PER_REG] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES)), CELL_MON_CELL_ADC_GAIN, CELL_MON_CELL_ADC_OFFSET);
+    }
+
+    return status;
+}
+
+TRANSACTION_STATUS_E readAuxVoltages(ADBMS_BatteryData * adbmsData)
+{
+    memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
+
+    uint8_t packRegisterData[NUM_AUXV_REGISTERS][REGISTER_SIZE_BYTES];
+    memset(packRegisterData, 0x00, NUM_AUXV_REGISTERS * REGISTER_SIZE_BYTES);
+
+    uint8_t *packMonitorDataBuffer;
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        packMonitorDataBuffer = transactionBuffer;
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+        packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
+    }
+
+    TRANSACTION_STATUS_E status = TRANSACTION_SUCCESS;
+    for(uint32_t i = 0; i < (NUM_AUXV_REGISTERS - 1); i++)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readChain(auxVoltageCode[i], &adbmsData->chainInfo, transactionBuffer);
+        }
+
+        memcpy(packRegisterData[i], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+
+        for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+        {
+            for(uint32_t k = 0; k < VOLTAGE_16BIT_PER_REG; k++)
+            {
+                adbmsData->cellMonitor[j].auxVoltage[(i * VOLTAGE_16BIT_PER_REG) + k] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (k * VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+            }
+        }
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = readChain(auxVoltageCode[NUM_AUXV_REGISTERS - 1], &adbmsData->chainInfo, transactionBuffer);
+    }
+
+    memcpy(packRegisterData[NUM_AUXV_REGISTERS - 1], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+
+    for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+    {
+        adbmsData->cellMonitor[j].auxVoltage[(NUM_AUXV_REGISTERS - 1) * VOLTAGE_16BIT_PER_REG] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+        adbmsData->cellMonitor[j].switch1Voltage = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+        adbmsData->cellMonitor[j].hvSupplyVoltage = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (2 * VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_HV_SUPPLY_GAIN, CELL_MON_HV_SUPPLY_OFFSET);
+    }
+
+     // Buffer[0], Buffer[1], and Buffer[2] hold aux voltages 1-9
+    for(uint32_t i = 0; i < VOLTAGE_16BIT_PER_REG; i++)
+    {
+        adbmsData->packMonitor.auxVoltage[i] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[0] + (i * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC1_GAIN, PACK_MON_VADC1_OFFSET);
+        adbmsData->packMonitor.auxVoltage[(i + VOLTAGE_16BIT_PER_REG)] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[1] + (i * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC1_GAIN, PACK_MON_VADC1_OFFSET);
+    }
+
+    adbmsData->packMonitor.auxVoltage[(2 * VOLTAGE_16BIT_PER_REG)]  = CONVERT_SIGNED_16_BIT_REGISTER(packRegisterData[2], PACK_MON_VADC1_GAIN, PACK_MON_VADC1_OFFSET);
+    adbmsData->packMonitor.auxVoltage[(2 * VOLTAGE_16BIT_PER_REG) + 1] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[2] + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC1_GAIN, PACK_MON_VADC1_OFFSET);
+    adbmsData->packMonitor.auxVoltage[(2 * VOLTAGE_16BIT_PER_REG) + 2] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[2] + (2 * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC2_GAIN, PACK_MON_VADC2_OFFSET);
+
+    adbmsData->packMonitor.auxVoltage[(3 * VOLTAGE_16BIT_PER_REG)] = CONVERT_SIGNED_16_BIT_REGISTER(packRegisterData[3], PACK_MON_VADC2_GAIN, PACK_MON_VADC2_OFFSET);
+    adbmsData->packMonitor.referenceVoltage = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[3] + (VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VREF2A_GAIN, PACK_MON_VREF2A_OFFSET);
+    adbmsData->packMonitor.redundantReferenceVoltage = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[3] + (2 * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VREF2B_GAIN, PACK_MON_VREF2B_OFFSET);
+
+    return status;
+}
+
+TRANSACTION_STATUS_E readRedundantAuxVoltages(ADBMS_BatteryData * adbmsData)
+{
+    memset(transactionBuffer, 0x00, adbmsData->chainInfo.numDevs * REGISTER_SIZE_BYTES);
+
+    uint8_t packRegisterData[NUM_AUXV_REGISTERS][REGISTER_SIZE_BYTES];
+    memset(packRegisterData, 0x00, NUM_AUXV_REGISTERS * REGISTER_SIZE_BYTES);
+
+    uint8_t *packMonitorDataBuffer;
+    uint8_t *cellMonitorDataBuffer;
+    if(adbmsData->chainInfo.packMonitorPort == PORTA)
+    {
+        packMonitorDataBuffer = transactionBuffer;
+        cellMonitorDataBuffer = transactionBuffer + REGISTER_SIZE_BYTES;
+    }
+    else
+    {
+        cellMonitorDataBuffer = transactionBuffer;
+        packMonitorDataBuffer = transactionBuffer + ((adbmsData->chainInfo.numDevs - 1) * REGISTER_SIZE_BYTES);
+    }
+
+    TRANSACTION_STATUS_E status = TRANSACTION_SUCCESS;
+    for(uint32_t i = 0; i < (NUM_AUXV_REGISTERS - 1); i++)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = readChain(redundantAuxVoltageCode[i], &adbmsData->chainInfo, transactionBuffer);
+        }
+
+        memcpy(packRegisterData[i], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+
+        for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+        {
+            for(uint32_t k = 0; k < VOLTAGE_16BIT_PER_REG; k++)
+            {
+                adbmsData->cellMonitor[j].reduntantAuxVoltage[(i * VOLTAGE_16BIT_PER_REG) + k] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES) + (k * VOLTAGE_16BIT_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+            }
+        }
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = readChain(redundantAuxVoltageCode[NUM_AUXV_REGISTERS - 1], &adbmsData->chainInfo, transactionBuffer);
+    }
+
+    memcpy(packRegisterData[NUM_AUXV_REGISTERS - 1], packMonitorDataBuffer, REGISTER_SIZE_BYTES);
+
+    for(uint32_t j = 0; j < (adbmsData->chainInfo.numDevs - 1); j++)
+    {
+        adbmsData->cellMonitor[j].reduntantAuxVoltage[(NUM_AUXV_REGISTERS - 1) * VOLTAGE_16BIT_PER_REG] = CONVERT_SIGNED_16_BIT_REGISTER((cellMonitorDataBuffer + (j * REGISTER_SIZE_BYTES)), CELL_MON_AUX_ADC_GAIN, CELL_MON_AUX_ADC_OFFSET);
+    }
+
+     // Buffer[0], Buffer[1], and Buffer[2] hold aux voltages 1-9
+    for(uint32_t i = 0; i < VOLTAGE_16BIT_PER_REG; i++)
+    {
+        adbmsData->packMonitor.redundantAuxVoltage[i] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[0] + (i * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC2_GAIN, PACK_MON_VADC2_OFFSET);
+        adbmsData->packMonitor.redundantAuxVoltage[(i + VOLTAGE_16BIT_PER_REG)] = CONVERT_SIGNED_16_BIT_REGISTER((packRegisterData[1] + (i * VOLTAGE_16BIT_SIZE_BYTES)), PACK_MON_VADC2_GAIN, PACK_MON_VADC2_OFFSET);
+    }
+
+    return status;
+}
