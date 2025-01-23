@@ -20,6 +20,7 @@
 
 #define BUSY_TIMEOUT_MS         20000
 
+#define display4gray            12000
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
 /* ==================================================================== */
@@ -175,7 +176,57 @@ void EPD_Init(void)
     sendData(dataBuffer, 1);
 }
 
+void EPD_Init_Fast(void){
+    reset();
 
+    sendCommand(0x00); // panel setting
+    dataBuffer[0] = 0x1f;
+    sendData(dataBuffer, 1);
+
+    sendCommand(0x50); // VCOM and data interval setting
+    dataBuffer[0] = 0x10;
+    dataBuffer[1] = 0x07;
+    sendData(dataBuffer, 2);
+
+    sendCommand(0x04);
+    vTaskDelay(100);
+    waitBusy();
+
+    sendCommand(0x06);
+    dataBuffer[0] = 0x27;
+    dataBuffer[1] = 0x27;
+    dataBuffer[2] = 0x18;
+    dataBuffer[3] = 0x17;
+    sendData(dataBuffer, 4);
+
+    sendCommand(0xE0);
+    dataBuffer[0] = 0x02;
+    sendData(dataBuffer, 1);
+    sendCommand(0xE5);
+    dataBuffer[0] = 0x5A;
+    sendData(dataBuffer, 1);
+
+}
+
+void EPD_Init_Partial(void){
+    reset();
+
+    sendCommand(0x00); // panel setting
+    dataBuffer[0] = 0x1f;
+    sendData(dataBuffer, 1);
+
+    sendCommand(0x04);
+    vTaskDelay(100);
+    waitBusy();
+
+    sendCommand(0xE0);
+    dataBuffer[0] = 0x02;
+    sendData(dataBuffer, 1);
+    sendCommand(0xE5);
+    dataBuffer[0] = 0x6E;
+    sendData(dataBuffer, 1);
+
+}
 
 //Display update function
 void EPD_Update(void)
@@ -185,6 +236,7 @@ void EPD_Update(void)
     waitBusy(); //wait for the electronic paper IC to release the idle signal
 }
 
+//full screen update
 void EPD_WhiteScreen_All(uint8_t *data)
 {
     sendCommand(0x10); //write old data
@@ -203,6 +255,8 @@ void EPD_WhiteScreen_All(uint8_t *data)
     EPD_Update();
 }
 
+//no difference between the normal whitescreen update and fast
+
 //clear screen display
 void EPD_WhiteScreen(void)
 {
@@ -220,6 +274,23 @@ void EPD_WhiteScreen(void)
     EPD_Update();
 }
 
+void EPD_WhiteScreen_Basemap(void)
+{
+    sendCommand(0x10); //write old data
+    for(uint32_t i = 0; i < EPD_ARRAY; i++)
+    {
+        dataBuffer[0] = 0xFF;
+        sendData(dataBuffer, 1);
+    }
+    sendCommand(0x13); //write new data
+    for(uint32_t i = 0; i < EPD_ARRAY; i++)
+    {
+        dataBuffer[0] = 0x00;
+        sendData(dataBuffer, 1);
+    }
+    EPD_Update();
+}
+
 //display all black
 void EPD_BlackScreen(void)
 {
@@ -232,7 +303,7 @@ void EPD_BlackScreen(void)
     sendCommand(0x13); //write new data
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        dataBuffer[0] = 0xff;
+        dataBuffer[0] = 0xFF;
         sendData(dataBuffer, 1);
     }
     EPD_Update();
@@ -283,7 +354,7 @@ void EPD_Display_Partial(uint8_t x_start,uint8_t y_start,uint8_t *datas,uint8_t 
     sendData(dataBuffer, 9);
 
     sendCommand(0x13); //write new data
-    for(uint32_t i = 0; i < EPD_ARRAY; i++)
+    for(uint32_t i = 0; i < PART_COLUMN*PART_LINE/8; i++)
     {
         sendData(&datas[i], 1);
     }
@@ -401,7 +472,58 @@ void EPD_Dis_Part_Time(uint8_t x_start,uint8_t y_start,
  
 }	
 
+void EPD_Init_180(void)
+{
+    reset();
 
+    sendCommand(0x01);
+    dataBuffer[0] = 0x07;
+    dataBuffer[1] = 0x07;
+    dataBuffer[2] = 0x3F;
+    dataBuffer[3] = 0x3f;
+    sendData(dataBuffer, 4);
+
+    sendCommand(0x06);
+    dataBuffer[0] = 0x17;
+    dataBuffer[1] = 0x17;
+    dataBuffer[2] = 0x28;
+    dataBuffer[3] = 0x17;
+    sendData(dataBuffer, 4);
+
+    sendCommand(0x04);
+    vTaskDelay(100);
+    waitBusy();
+
+    sendCommand(0x00);
+    dataBuffer[0] = 0x13;
+    sendData(dataBuffer, 1);
+
+    sendCommand(0x61);
+    dataBuffer[0] = 0x03;
+    dataBuffer[1] = 0x20;
+    dataBuffer[2] = 0x01;
+    dataBuffer[3] = 0xE0;
+    sendData(dataBuffer, 4);
+
+    
+    sendCommand(0x15);
+    dataBuffer[0] = 0x00;
+    sendData(dataBuffer, 1);
+
+        
+    sendCommand(0x50);
+    dataBuffer[0] = 0x10;
+    dataBuffer[1] = 0x07;
+    sendData(dataBuffer, 2);
+
+    sendCommand(0x60);
+    dataBuffer[0] = 0x22;
+    sendData(dataBuffer, 1);
+
+
+}
+
+//GUI display
 void EPD_Display(unsigned char *Image)
 {
     sendCommand(0x10);
@@ -414,12 +536,155 @@ void EPD_Display(unsigned char *Image)
     sendCommand(0x13);
     for(uint32_t i = 0; i < EPD_ARRAY; i++)
     {
-        sendData(&Image[i],1);
+        sendData(~Image[i],1);
     }
-
     EPD_Update();			 
 }
 
+void EPD_Init_4G(void)
+{
+    reset();
+
+    sendCommand(0x00);
+    dataBuffer[0] = 0x1F;
+    sendData(dataBuffer, 1);
+
+    sendCommand(0x50);
+    dataBuffer[0] = 0x10;
+    dataBuffer[1] = 0x07;
+    sendData(dataBuffer, 2);
+
+    sendCommand(0x04);
+    vTaskDelay(100);
+    waitBusy();
+
+    sendCommand(0x06);
+    dataBuffer[0] = 0x27;
+    dataBuffer[1] = 0x27;
+    dataBuffer[2] = 0x18;
+    dataBuffer[3] = 0x17;
+    sendData(dataBuffer, 4);
+
+    sendCommand(0xE0);
+    dataBuffer[0] = 0x02;
+    sendData(dataBuffer, 1);
+
+    sendCommand(0xE5);
+    dataBuffer[0] = 0x5F;
+    sendData(dataBuffer, 1);
+}
+
+
+void EPD_WhiteScreen_All_4G(uint8_t *datas)
+{
+    uint8_t temp1, temp2, temp3;
+
+    // Send old data
+    sendCommand(0x10);	       
+    for(uint32_t i = 0; i < 48000; i++) // 48000*2  800*480
+    { 
+        temp3 = 0;
+        temp1 = datas[i*2];
+        for(uint8_t k = 0; k < 4; k++)
+        {
+            temp2 = temp1 & 0xC0;
+            temp3 |= (temp2 == 0xC0 || temp2 == 0x40) ? 0x01 : 0x00;
+            if (k < 3) temp3 <<= 1;
+            temp1 <<= 2;
+        }
+        temp1 = datas[i*2 + 1];
+        for(uint8_t k = 0; k < 4; k++)
+        {
+            temp2 = temp1 & 0xC0;
+            temp3 |= (temp2 == 0xC0 || temp2 == 0x40) ? 0x01 : 0x00;
+            if (k < 2) temp3 <<= 1;
+            temp1 <<= 2;
+        }
+        sendData(~temp3, sizeof(~temp3));			
+    }
+
+    // Send new data
+    sendCommand(0x13);	       
+    for(uint32_t i = 0; i < 48000*2; i++) // 48000*2  800*480
+    { 
+        temp3 = 0;
+        temp1 = datas[i*2];
+        for(uint8_t k = 0; k < 4; k++)
+        {
+            temp2 = temp1 & 0xC0;
+            temp3 |= (temp2 == 0xC0 || temp2 == 0x40) ? 0x01 : 0x00;
+            if (k < 3) temp3 <<= 1;
+            temp1 <<= 2;
+        }
+        temp1 = datas[i*2 + 1];
+        for(uint8_t k = 0; k < 4; k++)
+        {
+            temp2 = temp1 & 0xC0;
+            temp3 |= (temp2 == 0xC0 || temp2 == 0x40) ? 0x01 : 0x00;
+            if (k < 2) temp3 <<= 1;
+            temp1 <<= 2;
+        }
+        sendData(~temp3, sizeof(~temp3));				
+    }
+
+    EPD_Update();
+}
+
+void Display_4Level_Gray(void)
+{
+	uint8_t i,j; 
+
+	waitBusy();
+	sendCommand(0x10);   
+  for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0x00;
+                sendData(dataBuffer, 1);
+		}
+  	
+ for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0xFF;
+                sendData(dataBuffer, 1);
+		}
+		
+		for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0x00;
+                sendData(dataBuffer, 1);
+		}
+		
+		for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0xFF;
+                sendData(dataBuffer, 1);		}
+			
+	waitBusy();
+	sendCommand(0x13);   
+	for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0x00;
+                sendData(dataBuffer, 1);
+		}
+  	
+ for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0x00;
+                sendData(dataBuffer, 1);
+		}
+		
+		for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0xFF;
+                sendData(dataBuffer, 1);		}
+		
+		for(i=0;i<display4gray;i++)
+		{
+                dataBuffer[0] = 0xFF;
+                sendData(dataBuffer, 1);		}
+
+		EPD_Update();
+}
 
 
 
