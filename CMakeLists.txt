@@ -62,11 +62,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../../Core/Src/GUI_Paint.c
     ../../Core/Src/Fonts/font8.c
     ../../Core/Src/Fonts/font12.c
-    ../../Core/Src/Fonts/font12CN.c
     ../../Core/Src/Fonts/font16.c
     ../../Core/Src/Fonts/font20.c
     ../../Core/Src/Fonts/font24.c
-    ../../Core/Src/Fonts/font24CN.c
 )
 
 # Enable floating point support for printf
