@@ -25,7 +25,8 @@
 #include <stdbool.h>
 #include "printTask.h"
 #include "utils.h"
-
+#include "charger.h"
+#include "chargerTask.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,11 +59,18 @@ osStaticThreadDef_t telemetryControlTaskBlock;
 osThreadId printTaskHandle;
 uint32_t printTaskBuffer[ 2048 ];
 osStaticThreadDef_t printTaskControlBlock;
+osThreadId chargerTaskHandle;
+uint32_t chargerTaskBuffer[ 1024 ];
+osStaticThreadDef_t chargerTaskControlBlock;
 /* USER CODE BEGIN PV */
 
+Charger_Data_S chargerTaskOutputData;
 telemetryTaskData_S telemetryTaskData;
 
 volatile bool usDelayActive;
+volatile bool chargerConnected = false;
+volatile bool newChargerMessage = false;
+volatile uint8_t chargerMessage[5];
 
 /* USER CODE END PV */
 
@@ -75,6 +83,7 @@ static void MX_TIM7_Init(void);
 static void MX_SPI1_Init(void);
 void startTelemetryTask(void const * argument);
 void startPrintTask(void const * argument);
+void startChargerTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 #ifdef __GNUC__
@@ -222,6 +231,10 @@ int main(void)
   /* definition and creation of printTask */
   osThreadStaticDef(printTask, startPrintTask, osPriorityLow, 0, 2048, printTaskBuffer, &printTaskControlBlock);
   printTaskHandle = osThreadCreate(osThread(printTask), NULL);
+
+  /* definition and creation of chargerTask */
+  osThreadStaticDef(chargerTask, startChargerTask, osPriorityAboveNormal, 0, 1024, chargerTaskBuffer, &chargerTaskControlBlock);
+  chargerTaskHandle = osThreadCreate(osThread(chargerTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -523,6 +536,24 @@ void startPrintTask(void const * argument)
     vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
   }
   /* USER CODE END startPrintTask */
+}
+
+/* USER CODE BEGIN Header_startChargerTask */
+/**
+* @brief Function implementing the chargerTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startChargerTask */
+void startChargerTask(void const * argument)
+{
+  /* USER CODE BEGIN startChargerTask */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END startChargerTask */
 }
 
 /**
