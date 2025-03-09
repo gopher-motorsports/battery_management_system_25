@@ -6,12 +6,17 @@
 #include "debug.h"
 #include <string.h>
 #include "cmsis_os.h"
+#include "utils.h"
+#include "packData.h"
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
 
 #define NUM_COMMAND_BLOCK_RETRYS            3
+
+#define NUM_CELL_TEMP_ADCS                  8
+#define BOARD_TEMP_ADC_INDEX                8
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -168,35 +173,79 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
     TRANSACTION_STATUS_E status;
 
     status = readCellVoltages(&batteryData, FILTERED_CELL_VOLTAGE);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    status = readAuxVoltages(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
-
-    tempMuxState++;
-    tempMuxState %= NUM_MUX_STATES;
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
-        batteryData.cellMonitor[i].configGroupA.gpo10State = tempMuxState;
+        for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+        {
+            float cellVoltage = batteryData.cellMonitor[i].cellVoltage[j];
+
+            if(fequals(cellVoltage, 0.0f))
+            {
+                taskData->bmb[i].cellVoltageStatus[j] = BAD;
+            }
+            else
+            {
+                taskData->bmb[i].cellVoltage[j] = cellVoltage;
+                taskData->bmb[i].cellVoltageStatus[j] = GOOD;
+            }
+
+        }
     }
 
-    status = writeConfigA(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
-        return status;
+        status = readAuxVoltages(&batteryData);
     }
 
-    status = readConfigA(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    uint32_t cellOffset = (uint32_t)tempMuxState;
+
+    for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
-        return status;
+        for(uint32_t j = 0; j < NUM_CELL_TEMP_ADCS; j++)
+        {
+            float auxVoltage = batteryData.cellMonitor[i].auxVoltage[j];
+
+            if(fequals(auxVoltage, 0.0f))
+            {
+                taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = BAD;
+            }
+            else
+            {
+                taskData->bmb[i].cellTemp[(j * 2) + cellOffset] = lookup(auxVoltage, &cellTempTable);
+                taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = GOOD;
+            }
+        }
+
+        float auxVoltage = batteryData.cellMonitor[i].auxVoltage[BOARD_TEMP_ADC_INDEX];
+
+        if(fequals(auxVoltage, 0.0f))
+        {
+            taskData->bmb[i].boardTempStatus = BAD;
+        }
+        else
+        {
+            taskData->bmb[i].boardTemp = lookup(auxVoltage, &boardTempTable);
+            taskData->bmb[i].boardTempStatus = GOOD;
+        }
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        tempMuxState++;
+        tempMuxState %= NUM_MUX_STATES;
+
+        for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        {
+            batteryData.cellMonitor[i].configGroupA.gpo10State = tempMuxState;
+        }
+
+        status = writeConfigA(&batteryData);
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = readConfigA(&batteryData);
     }
 
     return status;

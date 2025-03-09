@@ -75,8 +75,6 @@ typedef struct
     float avgCellTemp;
     uint32_t numBadCellTemp;
 
-
-
 } Bmb_S;
 
 typedef struct

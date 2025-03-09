@@ -15,6 +15,10 @@ TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(t
 
 TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData);
 
+TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData);
+
+TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData);
+
 TRANSACTION_STATUS_E testBlock(telemetryTaskData_S *taskData);
 
 

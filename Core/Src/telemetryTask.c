@@ -840,9 +840,14 @@ void runTelemetryTask()
         //         telemetryStatus = chainStatus;
         //     }
         // }
-        telemetryStatus = runCommandBlock(testBlock, &telemetryTaskDataLocal);
+        telemetryStatus = runCommandBlock(startNewReadCycle, &telemetryTaskDataLocal);
 
-        // // Configure registers for new telemetry data read
+        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            telemetryStatus = runCommandBlock(updateBatteryTelemetry, &telemetryTaskDataLocal);
+        }
+
+        // Configure registers for new telemetry data read
         // if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
         // {
         //     telemetryStatus = runCommandBlock(startNewReadCycle, &telemetryTaskDataLocal);
