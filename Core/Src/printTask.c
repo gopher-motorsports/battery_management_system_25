@@ -173,17 +173,17 @@ void initPrintTask()
 
 void runPrintTask()
 {
-    // PrintTaskInputData_S printTaskInputData;
-    // vTaskSuspendAll();
-    // printTaskInputData.telemetryTaskData = telemetryTaskData;
-    // xTaskResumeAll();
+    PrintTaskInputData_S printTaskInputData;
+    vTaskSuspendAll();
+    printTaskInputData.telemetryTaskData = telemetryTaskData;
+    xTaskResumeAll();
 
-    // // Clear terminal output
-    // printf("\e[1;1H\e[2J");
+    // Clear terminal output
+    printf("\e[1;1H\e[2J");
 
-    // // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    // printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
-    // printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    // printTestData(printTaskInputData.telemetryTaskData.bmb);
+    printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
+    printCellTemps(printTaskInputData.telemetryTaskData.bmb);
     // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
     // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
     // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);

@@ -15,13 +15,13 @@
 /* ==================================================================== */
 
 #define NUM_PACK_MON_IN_ACCUMULATOR 1
-#define NUM_CELL_MON_IN_ACCUMULATOR     1
+#define NUM_CELL_MON_IN_ACCUMULATOR 8
 #define NUM_DEVICES_IN_ACCUMULATOR  (NUM_PACK_MON_IN_ACCUMULATOR + NUM_CELL_MON_IN_ACCUMULATOR)
 
 // Use this to configure the order of the daisychain in the accumulator
 // BMB0 is the first BMB connected to PORT A, assign the desired segment index here
 #define BMB0_SEGMENT_INDEX  0
-// #define BMB1_SEGMENT_INDEX  1
+#define BMB1_SEGMENT_INDEX  1
 // #define BMB2_SEGMENT_INDEX  2
 // #define BMB3_SEGMENT_INDEX  3
 // #define BMB4_SEGMENT_INDEX  4
