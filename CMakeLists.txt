@@ -48,8 +48,10 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    ../../Core/Src/adbms.c
+    ../../Core/Src/adbms/isospi.c
+    ../../Core/Src/adbms/adbms.c
     ../../Core/Src/printTask.c
+    ../../Core/Src/telemetry.c
     ../../Core/Src/telemetryTask.c
     ../../Core/Src/utils.c
     ../../Core/Src/lookupTable.c
@@ -77,4 +79,14 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
 
     # Add user defined libraries
+)
+
+# Convert output to hex and binary
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.hex
+)
+
+# Convert to bin file -> add conditional check?
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.bin
 )
