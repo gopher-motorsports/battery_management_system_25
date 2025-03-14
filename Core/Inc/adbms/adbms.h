@@ -648,7 +648,7 @@ typedef struct __attribute__((packed))
 typedef struct
 {
     ADBMS_PackMonitorData packMonitor;
-    ADBMS_CellMonitorData cellMonitor[1];
+    ADBMS_CellMonitorData cellMonitor[8];
     CHAIN_INFO_S chainInfo;
 } ADBMS_BatteryData;
 

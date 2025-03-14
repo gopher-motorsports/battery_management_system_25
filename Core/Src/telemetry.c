@@ -101,6 +101,52 @@ TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         batteryData.chainInfo.packMonitorPort = PORTB;
     }
 
+    for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+    {
+        batteryData.cellMonitor[i].configGroupA.gpo1State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo2State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo3State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo4State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo5State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo6State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo7State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo8State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo9State = 1;
+        batteryData.cellMonitor[i].configGroupA.gpo10State = 0;
+    }
+
+    status = writeConfigA(&batteryData);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    // for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+    // {
+    //     for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+    //     {
+    //         batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = 1;
+    //     }
+    // }
+
+    // status = writeConfigB(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
+
+    status = startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
+    status = startAuxConversions(&batteryData, AUX_ALL_CHANNELS, AUX_OPEN_WIRE_DISABLED);
+    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        return status;
+    }
+
     return readSerialId(&batteryData);
 }
 
@@ -180,7 +226,7 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
         {
             float cellVoltage = batteryData.cellMonitor[i].cellVoltage[j];
 
-            if(fequals(cellVoltage, 0.0f))
+            if(fequals(cellVoltage, 1.5f))
             {
                 taskData->bmb[i].cellVoltageStatus[j] = BAD;
             }
@@ -206,7 +252,7 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
         {
             float auxVoltage = batteryData.cellMonitor[i].auxVoltage[j];
 
-            if(fequals(auxVoltage, 0.0f))
+            if(fequals(auxVoltage, 1.5f))
             {
                 taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = BAD;
             }
@@ -219,7 +265,7 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
 
         float auxVoltage = batteryData.cellMonitor[i].auxVoltage[BOARD_TEMP_ADC_INDEX];
 
-        if(fequals(auxVoltage, 0.0f))
+        if(fequals(auxVoltage, 1.5f))
         {
             taskData->bmb[i].boardTempStatus = BAD;
         }
@@ -237,10 +283,15 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
 
         for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
         {
-            batteryData.cellMonitor[i].configGroupA.gpo10State = tempMuxState;
+            batteryData.cellMonitor[i].configGroupA.gpo10State = (uint8_t)tempMuxState;
         }
 
         status = writeConfigA(&batteryData);
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = startAuxConversions(&batteryData, AUX_ALL_CHANNELS, AUX_OPEN_WIRE_DISABLED);
     }
 
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))

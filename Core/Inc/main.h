@@ -33,7 +33,7 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 #include "telemetryTask.h"
 
-#define TELEMETRY_TASK_PERIOD_MS  20
+#define TELEMETRY_TASK_PERIOD_MS  100
 #define PRINT_TASK_PERIOD_MS      1000
 
 /* USER CODE END Includes */
