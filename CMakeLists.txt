@@ -45,28 +45,43 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
+# Gather all project source files
+file(GLOB MAIN_SOURCES
+    "${CMAKE_SOURCE_DIR}/Core/Src/*.c"
+    "${CMAKE_SOURCE_DIR}/Core/Src/adbms/*.c"
+)
+
+# Gather all gophercan source files
+file(GLOB GOPHERCAN_SOURCES
+    "${CMAKE_SOURCE_DIR}/../gophercan-lib/*.c"
+)
+
+# Gather all gopher sense source files
+file(GLOB GOPHERSENSE_SOURCES
+    "${CMAKE_SOURCE_DIR}/../Gopher_Sense/lib/*.c"
+    "${CMAKE_SOURCE_DIR}/../Gopher_Sense/Build/*.c"
+)
+
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    ../../Core/Src/adbms/isospi.c
-    ../../Core/Src/adbms/adbms.c
-    ../../Core/Src/printTask.c
-    ../../Core/Src/telemetry.c
-    ../../Core/Src/telemetryTask.c
-    ../../Core/Src/utils.c
-    ../../Core/Src/lookupTable.c
-    ../../Core/Src/timer.c
-    ../../Core/Src/soc.c
-    ../../Core/Src/cellData.c
-    ../../Core/Src/packData.c
+    ${MAIN_SOURCES}
+    ${GOPHERCAN_SOURCES}
+    ${GOPHERSENSE_SOURCES}
 )
-
-# Enable floating point support for printf
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -u _printf_float")
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    "${CMAKE_SOURCE_DIR}/../gophercan-lib"
+    "${CMAKE_SOURCE_DIR}/../Gopher_Sense/lib"
+    "${CMAKE_SOURCE_DIR}/../Gopher_Sense/Build"
+)
+
+# Add linked libraries
+target_link_libraries(${CMAKE_PROJECT_NAME}
+    stm32cubemx
+    # Add user defined libraries
 )
 
 # Add project symbols (macros)
@@ -74,19 +89,11 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
 )
 
-# Add linked libraries
-target_link_libraries(${CMAKE_PROJECT_NAME}
-    stm32cubemx
-
-    # Add user defined libraries
-)
+# Enable floating point support for printf
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -u _printf_float")
 
 # Convert output to hex and binary
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.hex
-)
-
-# Convert to bin file -> add conditional check?
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.bin
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_NAME}.hex
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_NAME}.bin
 )
