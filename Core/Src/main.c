@@ -26,8 +26,6 @@
 #include "printTask.h"
 #include "utils.h"
 
-// #include "../GopherCAN_names.h"
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
