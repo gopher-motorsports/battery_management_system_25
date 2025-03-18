@@ -776,12 +776,6 @@
 
 void initTelemetryTask()
 {
-    HAL_GPIO_WritePin(MAS1_GPIO_Port, MAS1_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(MAS2_GPIO_Port, MAS2_Pin, GPIO_PIN_SET);
-
-    HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_SET);
-
     CHAIN_INFO_S defaultChainInfo = {
         .numDevs = NUM_DEVICES_IN_ACCUMULATOR,
         .packMonitorPort = PORTA,
