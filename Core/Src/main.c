@@ -24,7 +24,10 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include "printTask.h"
+#include "idleTask.h"
 #include "utils.h"
+
+#include "GopherCAN.h"
 
 /* USER CODE END Includes */
 
@@ -44,13 +47,18 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
+
+CAN_HandleTypeDef hcan2;
+
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
 
 TIM_HandleTypeDef htim7;
 
-UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart1;
 
 osThreadId telemetryTaskHandle;
 uint32_t telemetryTaskBuffer[ 4096 ];
@@ -58,6 +66,12 @@ osStaticThreadDef_t telemetryControlTaskBlock;
 osThreadId printTaskHandle;
 uint32_t printTaskBuffer[ 2048 ];
 osStaticThreadDef_t printTaskControlBlock;
+osThreadId idelTaskHandle;
+uint32_t idelTaskBuffer[ 128 ];
+osStaticThreadDef_t idelTaskControlBlock;
+osThreadId serviceGcanHandle;
+uint32_t serviceGcanTaskBuffer[ 128 ];
+osStaticThreadDef_t serviceGcanTaskControlBlock;
 /* USER CODE BEGIN PV */
 
 telemetryTaskData_S telemetryTaskData;
@@ -70,11 +84,15 @@ volatile bool usDelayActive;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
-static void MX_USART2_UART_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_CAN2_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_USART1_UART_Init(void);
 void startTelemetryTask(void const * argument);
 void startPrintTask(void const * argument);
+void startIdleTask(void const * argument);
+void startServiceGcanTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 #ifdef __GNUC__
@@ -87,7 +105,7 @@ void startPrintTask(void const * argument);
 
 PUTCHAR_PROTOTYPE
 {
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
   return ch;
 }
 
@@ -96,12 +114,12 @@ GETCHAR_PROTOTYPE
   uint8_t ch = 0;
 
   /* Clear the Overrun flag just before receiving the first character */
-  __HAL_UART_CLEAR_OREFLAG(&huart2);
+  __HAL_UART_CLEAR_OREFLAG(&huart1);
 
   /* Wait for reception of a character on the USART RX line and echo this
    * character on console */
-  HAL_UART_Receive(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  HAL_UART_Receive(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
   return ch;
 }
 /* USER CODE END PFP */
@@ -191,10 +209,15 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_USART2_UART_Init();
   MX_TIM7_Init();
   MX_SPI1_Init();
+  MX_CAN2_Init();
+  MX_ADC1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  init_can(&hcan2, GCAN0);
+  gsense_init(&hcan2, &hadc1, 0, 0, MCU_GSENSE_GPIO_Port, MCU_GSENSE_Pin);
 
   /* USER CODE END 2 */
 
@@ -222,6 +245,14 @@ int main(void)
   /* definition and creation of printTask */
   osThreadStaticDef(printTask, startPrintTask, osPriorityLow, 0, 2048, printTaskBuffer, &printTaskControlBlock);
   printTaskHandle = osThreadCreate(osThread(printTask), NULL);
+
+  /* definition and creation of idelTask */
+  osThreadStaticDef(idelTask, startIdleTask, osPriorityIdle, 0, 128, idelTaskBuffer, &idelTaskControlBlock);
+  idelTaskHandle = osThreadCreate(osThread(idelTask), NULL);
+
+  /* definition and creation of serviceGcan */
+  osThreadStaticDef(serviceGcan, startServiceGcanTask, osPriorityNormal, 0, 128, serviceGcanTaskBuffer, &serviceGcanTaskControlBlock);
+  serviceGcanHandle = osThreadCreate(osThread(serviceGcan), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -260,12 +291,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 12;
   RCC_OscInitStruct.PLL.PLLN = 128;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
@@ -288,6 +318,103 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = ENABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 2;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Rank = 2;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief CAN2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CAN2_Init(void)
+{
+
+  /* USER CODE BEGIN CAN2_Init 0 */
+
+  /* USER CODE END CAN2_Init 0 */
+
+  /* USER CODE BEGIN CAN2_Init 1 */
+
+  /* USER CODE END CAN2_Init 1 */
+  hcan2.Instance = CAN2;
+  hcan2.Init.Prescaler = 4;
+  hcan2.Init.Mode = CAN_MODE_NORMAL;
+  hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan2.Init.TimeSeg1 = CAN_BS1_6TQ;
+  hcan2.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan2.Init.TimeTriggeredMode = DISABLE;
+  hcan2.Init.AutoBusOff = ENABLE;
+  hcan2.Init.AutoWakeUp = ENABLE;
+  hcan2.Init.AutoRetransmission = DISABLE;
+  hcan2.Init.ReceiveFifoLocked = DISABLE;
+  hcan2.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CAN2_Init 2 */
+
+  /* USER CODE END CAN2_Init 2 */
+
 }
 
 /**
@@ -367,35 +494,35 @@ static void MX_TIM7_Init(void)
 }
 
 /**
-  * @brief USART2 Initialization Function
+  * @brief USART1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_USART2_UART_Init(void)
+static void MX_USART1_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART2_Init 0 */
+  /* USER CODE BEGIN USART1_Init 0 */
 
-  /* USER CODE END USART2_Init 0 */
+  /* USER CODE END USART1_Init 0 */
 
-  /* USER CODE BEGIN USART2_Init 1 */
+  /* USER CODE BEGIN USART1_Init 1 */
 
-  /* USER CODE END USART2_Init 1 */
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 1000000;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 1000000;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART2_Init 2 */
+  /* USER CODE BEGIN USART1_Init 2 */
 
-  /* USER CODE END USART2_Init 2 */
+  /* USER CODE END USART1_Init 2 */
 
 }
 
@@ -412,6 +539,9 @@ static void MX_DMA_Init(void)
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+  /* DMA2_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
   /* DMA2_Stream3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
@@ -430,40 +560,43 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(PORTB_CS_GPIO_Port, PORTB_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, AMS_FAULT_N_Pin|MCU_GSENSE_Pin|MCU_FAULT_Pin|MCU_HEARTBEAT_Pin
+                          |PORTB_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MAS2_GPIO_Port, MAS2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, MAS1_Pin|PORTA_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(AMS_INB_N_GPIO_Port, AMS_INB_N_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PORTB_CS_Pin */
-  GPIO_InitStruct.Pin = PORTB_CS_Pin;
+  /*Configure GPIO pins : AMS_FAULT_N_Pin MCU_GSENSE_Pin MCU_FAULT_Pin MCU_HEARTBEAT_Pin
+                           PORTB_CS_Pin */
+  GPIO_InitStruct.Pin = AMS_FAULT_N_Pin|MCU_GSENSE_Pin|MCU_FAULT_Pin|MCU_HEARTBEAT_Pin
+                          |PORTB_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(PORTB_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : MAS2_Pin */
-  GPIO_InitStruct.Pin = MAS2_Pin;
+  /*Configure GPIO pin : PORTA_CS_Pin */
+  GPIO_InitStruct.Pin = PORTA_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(MAS2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(PORTA_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : MAS1_Pin PORTA_CS_Pin */
-  GPIO_InitStruct.Pin = MAS1_Pin|PORTA_CS_Pin;
+  /*Configure GPIO pin : AMS_INB_N_Pin */
+  GPIO_InitStruct.Pin = AMS_INB_N_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(AMS_INB_N_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -521,8 +654,51 @@ void startPrintTask(void const * argument)
     // printf("PrintTaskTime: %lu\n", (HAL_GetTick()-taskStart));
 
     vTaskDelayUntil(&lastPrintTaskTick, printTaskPeriod);
+    // osDelay(1000);
   }
   /* USER CODE END startPrintTask */
+}
+
+/* USER CODE BEGIN Header_startIdleTask */
+/**
+* @brief Function implementing the idelTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startIdleTask */
+void startIdleTask(void const * argument)
+{
+  /* USER CODE BEGIN startIdleTask */
+  initIdleTask();
+  TickType_t lastIdleTaskTick;
+  const TickType_t idleTaskPeriod = pdMS_TO_TICKS(IDLE_TASK_PERIOD_MS);
+
+  /* Infinite loop */
+  for(;;)
+  {
+    runIdleTask();
+    vTaskDelayUntil(&lastIdleTaskTick, idleTaskPeriod);
+  }
+  /* USER CODE END startIdleTask */
+}
+
+/* USER CODE BEGIN Header_startServiceGcanTask */
+/**
+* @brief Function implementing the serviceGcan thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startServiceGcanTask */
+void startServiceGcanTask(void const * argument)
+{
+  /* USER CODE BEGIN startServiceGcanTask */
+  /* Infinite loop */
+  for(;;)
+  {
+    service_can_rx_buffer();
+    osDelay(1);
+  }
+  /* USER CODE END startServiceGcanTask */
 }
 
 /**

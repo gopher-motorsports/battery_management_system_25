@@ -33,8 +33,9 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 #include "telemetryTask.h"
 
-#define TELEMETRY_TASK_PERIOD_MS  100
+#define TELEMETRY_TASK_PERIOD_MS  20
 #define PRINT_TASK_PERIOD_MS      1000
+#define IDLE_TASK_PERIOD_MS       10
 
 /* USER CODE END Includes */
 
@@ -61,20 +62,26 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define AMS_FAULT_N_Pin GPIO_PIN_14
+#define AMS_FAULT_N_GPIO_Port GPIOC
+#define MCU_GSENSE_Pin GPIO_PIN_0
+#define MCU_GSENSE_GPIO_Port GPIOC
+#define MCU_FAULT_Pin GPIO_PIN_1
+#define MCU_FAULT_GPIO_Port GPIOC
+#define MCU_HEARTBEAT_Pin GPIO_PIN_2
+#define MCU_HEARTBEAT_GPIO_Port GPIOC
+#define PORTA_CS_Pin GPIO_PIN_4
+#define PORTA_CS_GPIO_Port GPIOA
 #define ISO_SPI_CLK_Pin GPIO_PIN_5
 #define ISO_SPI_CLK_GPIO_Port GPIOA
 #define ISO_SPI_MISO_Pin GPIO_PIN_6
 #define ISO_SPI_MISO_GPIO_Port GPIOA
 #define ISO_SPI_MOSI_Pin GPIO_PIN_7
 #define ISO_SPI_MOSI_GPIO_Port GPIOA
-#define PORTB_CS_Pin GPIO_PIN_7
+#define PORTB_CS_Pin GPIO_PIN_4
 #define PORTB_CS_GPIO_Port GPIOC
-#define MAS2_Pin GPIO_PIN_10
-#define MAS2_GPIO_Port GPIOA
-#define MAS1_Pin GPIO_PIN_4
-#define MAS1_GPIO_Port GPIOB
-#define PORTA_CS_Pin GPIO_PIN_6
-#define PORTA_CS_GPIO_Port GPIOB
+#define AMS_INB_N_Pin GPIO_PIN_7
+#define AMS_INB_N_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
