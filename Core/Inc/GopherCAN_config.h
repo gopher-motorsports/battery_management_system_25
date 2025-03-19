@@ -17,4 +17,7 @@
 // this can be used to pass messages between unconnected modules
 // #define ENABLE_ROUTING
 
+// If defined, enable CAN bootloader operation
+#define ENABLE_BOOTLOADER
+
 #endif
