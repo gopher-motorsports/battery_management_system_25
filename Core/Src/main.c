@@ -24,7 +24,6 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include "printTask.h"
-#include "idleTask.h"
 #include "utils.h"
 
 #include "GopherCAN.h"
@@ -57,6 +56,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
 
 TIM_HandleTypeDef htim7;
+TIM_HandleTypeDef htim9;
 
 UART_HandleTypeDef huart1;
 
@@ -66,17 +66,23 @@ osStaticThreadDef_t telemetryControlTaskBlock;
 osThreadId printTaskHandle;
 uint32_t printTaskBuffer[ 2048 ];
 osStaticThreadDef_t printTaskControlBlock;
-osThreadId idelTaskHandle;
-uint32_t idelTaskBuffer[ 128 ];
-osStaticThreadDef_t idelTaskControlBlock;
+osThreadId statusUpdateTasHandle;
+uint32_t statusUpdateTaskBuffer[ 128 ];
+osStaticThreadDef_t statusUpdateTaskControlBlock;
 osThreadId serviceGcanHandle;
 uint32_t serviceGcanTaskBuffer[ 128 ];
 osStaticThreadDef_t serviceGcanTaskControlBlock;
 /* USER CODE BEGIN PV */
 
 telemetryTaskData_S telemetryTaskData;
+statusUpdateTaskData_S statusUpdateTaskData;
 
 volatile bool usDelayActive;
+
+// Imd pwm status variables
+volatile uint32_t imdFrequency;
+volatile uint32_t imdDutyCycle;
+volatile uint32_t imdLastUpdate;
 
 /* USER CODE END PV */
 
@@ -89,9 +95,10 @@ static void MX_SPI1_Init(void);
 static void MX_CAN2_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM9_Init(void);
 void startTelemetryTask(void const * argument);
 void startPrintTask(void const * argument);
-void startIdleTask(void const * argument);
+void startStatusUpdateTask(void const * argument);
 void startServiceGcanTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
@@ -172,6 +179,37 @@ void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi)
 	}
 }
 
+/*!
+  @brief   Interrupt when Timer input capture triggered
+  @param   TIM Handle
+*/
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if ((htim == &htim9) && (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1))  // If the interrupt is triggered by channel 1 (Rising edge detection)
+	{
+    // Record imd update time
+    imdLastUpdate = HAL_GetTick();
+
+		// Read the raw IC value of the timer with rising edge detection
+		uint32_t inputCaptureRaw = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+    // Prevent divide by 0
+		if(inputCaptureRaw != 0)
+		{
+			// Calculate the Duty Cycle
+      // The captured value in channel one contains the timestamp of the falling edge. Since the timer is reset
+      // on a rising edge this contains the pulse width of the high time. This value is then divided by 
+      // inputCaptureRaw - which is the period of the PWM cycle in timer ticks to get duty cycle 
+			imdDutyCycle = (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2) * 100) / inputCaptureRaw;
+
+      // Calculate the Frequency
+      // The timer CLK runs at 2x frequency of PCLK2. This is then divided by the prescalar.
+      uint32_t timerFrequency = (HAL_RCC_GetPCLK2Freq() * 2) / htim9.Init.Prescaler;
+      // Frequency scaling
+			imdFrequency =  timerFrequency / inputCaptureRaw;
+		}
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -214,7 +252,12 @@ int main(void)
   MX_CAN2_Init();
   MX_ADC1_Init();
   MX_USART1_UART_Init();
+  MX_TIM9_Init();
   /* USER CODE BEGIN 2 */
+
+  // Start IMD input capture
+  HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_1);
+  HAL_TIM_IC_Start(&htim9, TIM_CHANNEL_2);
 
   init_can(&hcan2, GCAN0);
   gsense_init(&hcan2, &hadc1, 0, 0, MCU_GSENSE_GPIO_Port, MCU_GSENSE_Pin);
@@ -246,9 +289,9 @@ int main(void)
   osThreadStaticDef(printTask, startPrintTask, osPriorityLow, 0, 2048, printTaskBuffer, &printTaskControlBlock);
   printTaskHandle = osThreadCreate(osThread(printTask), NULL);
 
-  /* definition and creation of idelTask */
-  osThreadStaticDef(idelTask, startIdleTask, osPriorityIdle, 0, 128, idelTaskBuffer, &idelTaskControlBlock);
-  idelTaskHandle = osThreadCreate(osThread(idelTask), NULL);
+  /* definition and creation of statusUpdateTas */
+  osThreadStaticDef(statusUpdateTas, startStatusUpdateTask, osPriorityIdle, 0, 128, statusUpdateTaskBuffer, &statusUpdateTaskControlBlock);
+  statusUpdateTasHandle = osThreadCreate(osThread(statusUpdateTas), NULL);
 
   /* definition and creation of serviceGcan */
   osThreadStaticDef(serviceGcan, startServiceGcanTask, osPriorityNormal, 0, 128, serviceGcanTaskBuffer, &serviceGcanTaskControlBlock);
@@ -494,6 +537,73 @@ static void MX_TIM7_Init(void)
 }
 
 /**
+  * @brief TIM9 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM9_Init(void)
+{
+
+  /* USER CODE BEGIN TIM9_Init 0 */
+
+  /* USER CODE END TIM9_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM9_Init 1 */
+
+  /* USER CODE END TIM9_Init 1 */
+  htim9.Instance = TIM9;
+  htim9.Init.Prescaler = 512-1;
+  htim9.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim9.Init.Period = 65535;
+  htim9.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim9.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim9) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim9, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_Init(&htim9) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_RESET;
+  sSlaveConfig.InputTrigger = TIM_TS_TI1FP1;
+  sSlaveConfig.TriggerPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
+  sSlaveConfig.TriggerPrescaler = TIM_ICPSC_DIV1;
+  sSlaveConfig.TriggerFilter = 0;
+  if (HAL_TIM_SlaveConfigSynchro(&htim9, &sSlaveConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim9, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_INDIRECTTI;
+  if (HAL_TIM_IC_ConfigChannel(&htim9, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM9_Init 2 */
+
+  /* USER CODE END TIM9_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -659,27 +769,27 @@ void startPrintTask(void const * argument)
   /* USER CODE END startPrintTask */
 }
 
-/* USER CODE BEGIN Header_startIdleTask */
+/* USER CODE BEGIN Header_startStatusUpdateTask */
 /**
-* @brief Function implementing the idelTask thread.
+* @brief Function implementing the statusUpdateTas thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_startIdleTask */
-void startIdleTask(void const * argument)
+/* USER CODE END Header_startStatusUpdateTask */
+void startStatusUpdateTask(void const * argument)
 {
-  /* USER CODE BEGIN startIdleTask */
-  initIdleTask();
-  TickType_t lastIdleTaskTick;
-  const TickType_t idleTaskPeriod = pdMS_TO_TICKS(IDLE_TASK_PERIOD_MS);
+  /* USER CODE BEGIN startStatusUpdateTask */
+  initStatusUpdateTask();
+  TickType_t lastStatusUpdateTaskTick;
+  const TickType_t statusUpdateTaskPeriod = pdMS_TO_TICKS(STATUS_UPDATE_TASK_PERIOD_MS);
 
   /* Infinite loop */
   for(;;)
   {
-    runIdleTask();
-    vTaskDelayUntil(&lastIdleTaskTick, idleTaskPeriod);
+    runStatusUpdateTask();
+    vTaskDelayUntil(&lastStatusUpdateTaskTick, statusUpdateTaskPeriod);
   }
-  /* USER CODE END startIdleTask */
+  /* USER CODE END startStatusUpdateTask */
 }
 
 /* USER CODE BEGIN Header_startServiceGcanTask */

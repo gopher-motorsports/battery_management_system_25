@@ -5,6 +5,7 @@
 #include "printTask.h"
 #include "main.h"
 #include "telemetryTask.h"
+#include "statusUpdateTask.h"
 #include "cmsis_os.h"
 #include <stdio.h>
 
@@ -15,6 +16,7 @@
 typedef struct
 {
     telemetryTaskData_S telemetryTaskData;
+    statusUpdateTaskData_S statusUpdateTaskData;
 } PrintTaskInputData_S;
 
 /* ==================================================================== */
@@ -24,6 +26,8 @@ typedef struct
 // static void printTestData(Bmb_S* bmb);
 static void printCellVoltages(Bmb_S* bmb);
 static void printCellTemps(Bmb_S* bmb);
+
+static void printImdData(imdData_S* imdData);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
@@ -162,6 +166,47 @@ static void printCellTemps(Bmb_S* bmb)
 //     printf("\n");
 // }
 
+static void printImdData(imdData_S* imdData)
+{
+    printf("IMD Status: ");
+    switch(imdData->imdStatus)
+    {
+    case IMD_NO_SIGNAL:
+        printf("NO SIGNAL\n");
+        break;  
+    case IMD_NORMAL:
+        printf("NORMAL\n");
+        break;
+    case IMD_UNDER_VOLT:
+        printf("UNDER VOLTAGE\n");
+        break;
+    case IMD_SPEED_START_MEASUREMENT:
+        printf("SPEED START\n");
+        break;
+    case IMD_DEVICE_ERROR:
+        printf("DEVICE ERROR\n");
+        break;
+    case IMD_CHASSIS_FAULT:
+        printf("CHASSIS FAULT\n");
+        break;
+    default:
+        printf("UKNOWN ERROR\n");
+        break;
+    }
+
+    printf("Speed start status: ");
+    if(imdData->speedStartSuccess)
+    {
+        printf("Success in %5.3fs\n", ((float)(imdData->speedStartTime) / 1000.0f));
+    }
+    else
+    {
+        printf("Fail\n");
+    }
+
+    printf("Isolation Resistance (Kohm): %lu\n\n", imdData->isolationResistance);
+}
+
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
@@ -176,6 +221,7 @@ void runPrintTask()
     PrintTaskInputData_S printTaskInputData;
     vTaskSuspendAll();
     printTaskInputData.telemetryTaskData = telemetryTaskData;
+    printTaskInputData.statusUpdateTaskData = statusUpdateTaskData;
     xTaskResumeAll();
 
     // Clear terminal output
@@ -228,5 +274,7 @@ void runPrintTask()
     //     default:
     //         break;
     // }
+
+    printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
 
 }
