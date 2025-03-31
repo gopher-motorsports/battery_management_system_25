@@ -32,10 +32,11 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "telemetryTask.h"
+#include "statusUpdateTask.h"
 
-#define TELEMETRY_TASK_PERIOD_MS  20
-#define PRINT_TASK_PERIOD_MS      1000
-#define IDLE_TASK_PERIOD_MS       10
+#define TELEMETRY_TASK_PERIOD_MS      20
+#define PRINT_TASK_PERIOD_MS          1000
+#define STATUS_UPDATE_TASK_PERIOD_MS  10
 
 /* USER CODE END Includes */
 
@@ -86,6 +87,7 @@ void Error_Handler(void);
 /* USER CODE BEGIN Private defines */
 
 extern telemetryTaskData_S telemetryTaskData;
+extern statusUpdateTaskData_S statusUpdateTaskData;
 
 /* USER CODE END Private defines */
 
