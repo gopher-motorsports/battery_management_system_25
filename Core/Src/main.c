@@ -27,6 +27,7 @@
 #include "utils.h"
 
 #include "GopherCAN.h"
+#include "gopher_sense.h"
 
 /* USER CODE END Includes */
 

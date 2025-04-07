@@ -8,6 +8,7 @@
 #include "statusUpdateTask.h"
 #include "cmsis_os.h"
 #include <stdio.h>
+#include "GopherCAN.h"
 
 /* ==================================================================== */
 /* ============================== STRUCTS ============================= */
@@ -228,8 +229,8 @@ void runPrintTask()
     printf("\e[1;1H\e[2J");
 
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
-    printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    // printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
+    // printCellTemps(printTaskInputData.telemetryTaskData.bmb);
     // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
     // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
     // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
@@ -275,6 +276,8 @@ void runPrintTask()
     //         break;
     // }
 
-    printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+    // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+
+    printf("SOE: %f\n", soeByOCV_percent.data);
 
 }

@@ -12,6 +12,10 @@
 #include "packData.h"
 #include "cellData.h"
 #include <string.h>
+#include "GopherCAN.h"
+#include "gopher_sense.h"
+
+extern CAN_HandleTypeDef hcan2;
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -915,6 +919,16 @@ void runTelemetryTask()
     // Blah blah alert monitor
 
     // TODO Handle case of continous POR / CC errors here
+
+    static float val = 0.0f;
+    val += 0.1f;
+    if(val > 1000.0f)
+    {
+        val = 0.0f;
+    }
+
+    update_and_queue_param_float(&soeByOCV_percent, val);
+    service_can_tx(&hcan2);
 
     // Copy out new data into global data struct
     vTaskSuspendAll();

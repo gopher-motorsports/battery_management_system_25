@@ -34,7 +34,7 @@ extern "C" {
 #include "telemetryTask.h"
 #include "statusUpdateTask.h"
 
-#define TELEMETRY_TASK_PERIOD_MS      20
+#define TELEMETRY_TASK_PERIOD_MS      25
 #define PRINT_TASK_PERIOD_MS          1000
 #define STATUS_UPDATE_TASK_PERIOD_MS  10
 
