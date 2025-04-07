@@ -8,6 +8,7 @@
 #include "statusUpdateTask.h"
 #include "cmsis_os.h"
 #include <stdio.h>
+#include "GopherCAN.h"
 
 /* ==================================================================== */
 /* ============================== STRUCTS ============================= */
@@ -283,13 +284,53 @@ void runPrintTask()
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
     // printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
     // printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
+    // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
+    // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
+    // printf("VBADC2: %f\n", printTaskInputData.telemetryTaskData.VBADC2);
 
-    // Print cell stats
-    // printCellStats(printTaskInputData.telemetryTaskData.bmb);
+    // printf("\n");
+    // printf("Max Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.maxCellVoltage);
+    // printf("Min Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.minCellVoltage);
+    // printf("Max Cell Temp: %f\n", printTaskInputData.telemetryTaskData.maxCellTemp);
+    // printf("Min Cell Temp: %f\n", printTaskInputData.telemetryTaskData.minCellTemp);
 
-    // Print all pack mon
-    printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
+    // printf("\n");
+    // printf("SOC by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.socByOcv * 100.0f);
+    // printf("SOE by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.soeByOcv * 100.0f);
+    // printf("\n");
+    // printf("Millicoulomb Counter: %lu\n", printTaskInputData.telemetryTaskData.socData.milliCoulombCounter);
+    // printf("SOC by CC: %f\n", printTaskInputData.telemetryTaskData.socData.socByCoulombCounting * 100.0f);
+    // printf("SOE by CC: %f\n", printTaskInputData.telemetryTaskData.socData.soeByCoulombCounting * 100.0f);
+
+    // printf("\n");
+    // printf("Conversion Phase Counter: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.localPhaseCountTimer.timCount * 4);
+    // printf("ICNTPHA: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionPhaseCounter);
+    // printf("IADC Conversion Time: %f\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionTimeMS);
+
+    // printf("\n");
+    // printf("Diagnostic state: ");
+    // switch(printTaskInputData.telemetryTaskData.curentDiagnosticState)
+    // {
+    //     case REDUNDANT_ADC_DIAG_STATE:
+    //         printf("REDUNDANT\n");
+    //         break;
+    //     case BALANCING_DIAG_STATE:
+    //         printf("BALANCING\n");
+    //         break;
+    //     case OPEN_WIRE_EVEN_DIAG_STATE:
+    //         printf("OPEN WIRE EVEN\n");
+    //         break;
+    //     case OPEN_WIRE_ODD_DIAG_STATE:
+    //         printf("OPEN WIRE ODD\n");
+    //         break;
+
+    //     default:
+    //         break;
+    // }
 
     // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+
+    printf("SOE: %f\n", soeByOCV_percent.data);
 
 }
