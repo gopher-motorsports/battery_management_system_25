@@ -76,8 +76,8 @@
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
-// static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray, bool diagnosticAdc);
-// static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray);
+// static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Cell_Monitor_S *bmbArray, bool diagnosticAdc);
+// static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Cell_Monitor_S *bmbArray);
 
 // static TRANSACTION_STATUS_E runCommandBlock(TRANSACTION_STATUS_E (*telemetryFunction)(telemetryTaskData_S*), telemetryTaskData_S *taskData);
 
@@ -89,7 +89,7 @@
 // static TRANSACTION_STATUS_E updateEnergyData(telemetryTaskData_S *taskData);
 // static TRANSACTION_STATUS_E runAdcDiagnostics(telemetryTaskData_S *taskData);
 
-// static void updateBmbStatistics(Bmb_S *bmb);
+// static void updateBmbStatistics(Cell_Monitor_S *bmb);
 // static void updatePackStatistics(telemetryTaskData_S *taskData);
 
 /* ==================================================================== */
@@ -114,7 +114,7 @@
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
 
-// static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray, bool diagnosticAdc)
+// static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Cell_Monitor_S *bmbArray, bool diagnosticAdc)
 // {
 //     int32_t cellsInReg = CELLS_PER_REG;
 //     if((NUM_CELLS_PER_CELL_MONITOR - cellStartIndex) < CELLS_PER_REG)
@@ -141,7 +141,7 @@
 //     }
 // }
 
-// static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Bmb_S *bmbArray)
+// static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Cell_Monitor_S *bmbArray)
 // {
 //     int32_t cellsInReg = CELLS_PER_REG;
 //     if((NUM_CELLS_PER_CELL_MONITOR - cellStartIndex + 1) < (CELLS_PER_REG * 2))
@@ -599,11 +599,11 @@
 //     return status;
 // }
 
-// static void updateBmbStatistics(Bmb_S *bmb)
+// static void updateBmbStatistics(Cell_Monitor_S *bmb)
 // {
 // 	for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 // 	{
-// 		Bmb_S* pBmb = &bmb[i];
+// 		Cell_Monitor_S* pBmb = &bmb[i];
 // 		float maxCellVoltage = MIN_CELLV_SENSOR_VALUE;
 // 		float minCellVoltage = MAX_CELLV_SENSOR_VALUE;
 // 		float sumVoltage = 0.0f;
@@ -696,7 +696,7 @@
 
 // 	for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 // 	{
-// 		Bmb_S* pBmb = &taskData->bmb[i];
+// 		Cell_Monitor_S* pBmb = &taskData->bmb[i];
 
 //         if(pBmb->numBadCellVoltage != NUM_CELLS_PER_CELL_MONITOR)
 //         {
@@ -776,23 +776,10 @@
 
 void initTelemetryTask()
 {
-    CHAIN_INFO_S defaultChainInfo = {
-        .numDevs = NUM_DEVICES_IN_ACCUMULATOR,
-        .packMonitorPort = PORTA,
-        .chainStatus = CHAIN_COMPLETE,
-        .availableDevices[PORTA] = NUM_DEVICES_IN_ACCUMULATOR,
-        .availableDevices[PORTB] = NUM_DEVICES_IN_ACCUMULATOR,
-        .currentPort = PORTA,
-        .localCommandCounter[CELL_MONITOR] = 0,
-        .localCommandCounter[PACK_MONITOR] = 0
-    };
-
     Soc_S defaultSocInfo = {
         .socByOcvQualificationTimer = (Timer_S){.timCount = CELL_POLARIZATION_REST_MS, .lastUpdate = 0, .timThreshold = CELL_POLARIZATION_REST_MS},
         .packMilliCoulombs = PACK_MILLICOULOMBS,
         .milliCoulombCounter = 0,
-        .packMilliJoules = PACK_MILLIJOULES,
-        .milliJouleCounter = 0,
         .socByOcv = 0.0f,
         .soeByOcv = 0.0f,
         .socByCoulombCounting = 0.0f,
@@ -800,10 +787,7 @@ void initTelemetryTask()
     };
 
     vTaskSuspendAll();
-    telemetryTaskData.chainInfo = defaultChainInfo;
-    telemetryTaskData.socData = defaultSocInfo;
-    telemetryTaskData.packMonitorData.localPhaseCountTimer.timThreshold = UINT32_MAX;
-    telemetryTaskData.packMonitorData.shuntResistanceMicroOhms = SHUNT_RESISTOR_REFERENCE_UV;
+    telemetryTaskData.packMonitor.socData = defaultSocInfo;
     xTaskResumeAll();
 }
 
@@ -817,80 +801,7 @@ void runTelemetryTask()
     telemetryTaskDataLocal = telemetryTaskData;
     xTaskResumeAll();
 
-    TRANSACTION_STATUS_E telemetryStatus = TRANSACTION_SUCCESS;
-
-    if(telemetryTaskDataLocal.chainInitialized)
-    {
-
-        // // Ready up isospi comms
-        // readyChain(&telemetryTaskDataLocal.chainInfo);
-
-        // // If the chain is not complete, attempt to fix it before starting task transactions
-        // if(telemetryTaskDataLocal.chainInfo.chainStatus != CHAIN_COMPLETE)
-        // {
-        //     TRANSACTION_STATUS_E chainStatus = updateChainStatus(&telemetryTaskDataLocal.chainInfo);
-        //     if(chainStatus != TRANSACTION_COMMAND_COUNTER_ERROR)
-        //     {
-        //         telemetryStatus = chainStatus;
-        //     }
-        // }
-        telemetryStatus = runCommandBlock(startNewReadCycle, &telemetryTaskDataLocal);
-
-        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        {
-            telemetryStatus = runCommandBlock(updateBatteryTelemetry, &telemetryTaskDataLocal);
-        }
-
-        // Configure registers for new telemetry data read
-        // if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        // {
-        //     telemetryStatus = runCommandBlock(startNewReadCycle, &telemetryTaskDataLocal);
-        // }
-
-        // // Read in cell voltages
-        // if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        // {
-        //     telemetryStatus = runCommandBlock(updateCellVoltages, &telemetryTaskDataLocal);
-        // }
-
-        // // Read in cell temps
-        // if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        // {
-        //     telemetryStatus = runCommandBlock(updateCellTemps, &telemetryTaskDataLocal);
-        //     updatePackStatistics(&telemetryTaskDataLocal);
-        // }
-
-        // if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        // {
-        //     telemetryStatus = runCommandBlock(updateEnergyData, &telemetryTaskDataLocal);
-        //     updateSocSoe(&telemetryTaskDataLocal.socData, telemetryTaskDataLocal.minCellVoltage);
-        // }
-
-        // // Read in adc diagnostics
-        // if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        // {
-        //     telemetryStatus = runCommandBlock(runAdcDiagnostics, &telemetryTaskDataLocal);
-        // }
-    }
-
-    if(!telemetryTaskDataLocal.chainInitialized || (telemetryStatus == TRANSACTION_POR_ERROR))
-    {
-        Debug("Initializing chain...\n");
-
-        // wakeChain(&telemetryTaskDataLocal.chainInfo);
-        telemetryStatus = runCommandBlock(initChain, &telemetryTaskDataLocal);
-
-        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
-        {
-            Debug("BMB initialization successful!\n");
-            telemetryTaskDataLocal.chainInitialized = true;
-        }
-        else
-        {
-            Debug("BMBs failed to initialize!\n");
-            telemetryTaskDataLocal.chainInitialized = false;
-        }
-    }
+    TRANSACTION_STATUS_E telemetryStatus = updateBatteryTelemetry(&telemetryTaskDataLocal);
 
     if(telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR)
     {

@@ -19,13 +19,20 @@ typedef struct
     statusUpdateTaskData_S statusUpdateTaskData;
 } PrintTaskInputData_S;
 
+extern TIM_HandleTypeDef htim5;
+
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
-// static void printTestData(Bmb_S* bmb);
-static void printCellVoltages(Bmb_S* bmb);
-static void printCellTemps(Bmb_S* bmb);
+// static void printTestData(Cell_Monitor_S* bmb);
+static void printCellVoltages(Cell_Monitor_S* bmb);
+static void printCellTemps(Cell_Monitor_S* bmb);
+static void printCellStats(telemetryTaskData_S* telemetryData);
+static void printCellMonDiag(Cell_Monitor_S* bmb);
+
+static void printEnergyData(Pack_Monitor_S* packMon);
+static void printPackMonDiag(Pack_Monitor_S* packMon);
 
 static void printImdData(imdData_S* imdData);
 
@@ -33,7 +40,7 @@ static void printImdData(imdData_S* imdData);
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
 
-static void printCellVoltages(Bmb_S* bmb)
+static void printCellVoltages(Cell_Monitor_S* bmb)
 {
     printf("Cell Voltage:\n");
     printf("|   CELL   |");
@@ -68,7 +75,7 @@ static void printCellVoltages(Bmb_S* bmb)
 	printf("\n");
 }
 
-static void printCellTemps(Bmb_S* bmb)
+static void printCellTemps(Cell_Monitor_S* bmb)
 {
     printf("Cell Temp:\n");
     printf("|   BMB    |");
@@ -144,7 +151,53 @@ static void printCellTemps(Bmb_S* bmb)
 	// printf("\n");
 }
 
-// static void printTestData(Bmb_S* bmb)
+static void printCellStats(telemetryTaskData_S* telemetryData)
+{
+    // printf("")
+
+}
+
+static void printCellMonDiag(Cell_Monitor_S* bmb)
+{
+
+}
+
+static void printEnergyData(Pack_Monitor_S* packMon)
+{
+    printf("Pack current: %f\n", packMon->packCurrent);
+    printf("Pack voltage: %f\n", packMon->packVoltage);
+    printf("Pack Power: %f\n", packMon->packPower);
+
+    printf("Pack Mon Board Temp: %f\n", packMon->boardTemp);
+    printf("Shunt Temp 1: %f\n", packMon->shuntTemp1);
+    printf("Shunt Temp 2: %f\n", packMon->shuntTemp2);
+    printf("Shunt Resistance uOhm: %f\n", packMon->shuntResistanceMicroOhms);
+    printf("Pre Temp 1: %f\n", packMon->prechargeTemp);
+    printf("Dis Temp 2: %f\n", packMon->dischargeTemp);
+    printf("Link Voltage %f\n\n", packMon->linkVoltage);
+
+    printf("SOC by OCV: %3.1f\n", packMon->socData.socByOcv * 100.0f);
+    printf("SOE by OCV: %3.1f\n\n", packMon->socData.soeByOcv * 100.0f);
+
+    printf("Millicoulomb Counter: %lu\n", packMon->socData.milliCoulombCounter);
+    printf("Pack Millicoulombs: %lu\n", packMon->socData.packMilliCoulombs);
+    printf("SOC by CC: %3.1f\n", packMon->socData.socByCoulombCounting * 100.0f);
+    printf("SOE by CC: %3.1f\n\n", packMon->socData.soeByCoulombCounting * 100.0f);
+
+    printf("Conversion Phase Counter: %lu\n", packMon->adcConversionPhaseCounter / 4);
+    printf("Next Valid count: %lu\n", packMon->nextQualifiedPhaseCount / 4);
+    printf("ADC Conversion time ms: %f\n", packMon->adcConversionTimeMS);
+    printf("Local timer: %lu\n", __HAL_TIM_GetCounter(&htim5));
+
+}
+
+static void printPackMonDiag(Pack_Monitor_S* packMon)
+{
+
+}
+
+
+// static void printTestData(Cell_Monitor_S* bmb)
 // {
 //     // Print header
 //     printf("| BMB |");
@@ -228,53 +281,15 @@ void runPrintTask()
     printf("\e[1;1H\e[2J");
 
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
-    printCellTemps(printTaskInputData.telemetryTaskData.bmb);
-    // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
-    // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
-    // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
-    // printf("VBADC2: %f\n", printTaskInputData.telemetryTaskData.VBADC2);
+    // printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
+    // printCellTemps(printTaskInputData.telemetryTaskData.bmb);
 
-    // printf("\n");
-    // printf("Max Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.maxCellVoltage);
-    // printf("Min Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.minCellVoltage);
-    // printf("Max Cell Temp: %f\n", printTaskInputData.telemetryTaskData.maxCellTemp);
-    // printf("Min Cell Temp: %f\n", printTaskInputData.telemetryTaskData.minCellTemp);
+    // Print cell stats
+    // printCellStats(printTaskInputData.telemetryTaskData.bmb);
 
-    // printf("\n");
-    // printf("SOC by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.socByOcv * 100.0f);
-    // printf("SOE by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.soeByOcv * 100.0f);
-    // printf("\n");
-    // printf("Millicoulomb Counter: %lu\n", printTaskInputData.telemetryTaskData.socData.milliCoulombCounter);
-    // printf("SOC by CC: %f\n", printTaskInputData.telemetryTaskData.socData.socByCoulombCounting * 100.0f);
-    // printf("SOE by CC: %f\n", printTaskInputData.telemetryTaskData.socData.soeByCoulombCounting * 100.0f);
+    // Print all pack mon
+    printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
-    // printf("\n");
-    // printf("Conversion Phase Counter: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.localPhaseCountTimer.timCount * 4);
-    // printf("ICNTPHA: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionPhaseCounter);
-    // printf("IADC Conversion Time: %f\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionTimeMS);
-
-    // printf("\n");
-    // printf("Diagnostic state: ");
-    // switch(printTaskInputData.telemetryTaskData.curentDiagnosticState)
-    // {
-    //     case REDUNDANT_ADC_DIAG_STATE:
-    //         printf("REDUNDANT\n");
-    //         break;
-    //     case BALANCING_DIAG_STATE:
-    //         printf("BALANCING\n");
-    //         break;
-    //     case OPEN_WIRE_EVEN_DIAG_STATE:
-    //         printf("OPEN WIRE EVEN\n");
-    //         break;
-    //     case OPEN_WIRE_ODD_DIAG_STATE:
-    //         printf("OPEN WIRE ODD\n");
-    //         break;
-
-    //     default:
-    //         break;
-    // }
-
-    printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+    // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
 
 }

@@ -18,7 +18,7 @@
 
 #define SHUNT_RESISTOR_REFERENCE_UV 50.0f
 
-extern LookupTable_S cellTempTable;
-extern LookupTable_S boardTempTable;
+extern LookupTable_S cellMonTempTable;
+extern LookupTable_S packMonTempTable;
 
 #endif /* INC_PACKDATA_H_ */

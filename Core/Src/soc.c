@@ -67,7 +67,6 @@ void updateSocSoe(Soc_S* soc, float minCellVoltage)
     else
     {
         soc->socByCoulombCounting = calculatePercent(soc->milliCoulombCounter, soc->packMilliCoulombs);
-        // soc->soeByCoulombCounting = calculatePercent(soc->milliJouleCounter, soc->packMilliJoules);
         soc->soeByCoulombCounting = getSoeFromSoc(soc->socByCoulombCounting);
     }
 }

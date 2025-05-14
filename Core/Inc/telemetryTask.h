@@ -55,37 +55,150 @@ typedef enum
 
 typedef struct
 {
+    // Cell voltage array
     float cellVoltage[NUM_CELLS_PER_CELL_MONITOR];
     SENSOR_STATUS_E cellVoltageStatus[NUM_CELLS_PER_CELL_MONITOR];
 
+    // Cell temp array
     float cellTemp[NUM_CELLS_PER_CELL_MONITOR];
     SENSOR_STATUS_E cellTempStatus[NUM_CELLS_PER_CELL_MONITOR];
 
+    // Board temp
     float boardTemp;
     SENSOR_STATUS_E boardTempStatus;
 
+    // Onboard reference voltage
+    float referenceVoltage;
+    SENSOR_STATUS_E referenceVoltageStatus;
+
+    // Die temperature
+    float dieTemp;
+    SENSOR_STATUS_E dieTempStatus;
+
+    // Digital supply voltage
+    float digitalSupplyVoltage;
+    SENSOR_STATUS_E digitalSupplyVoltageStatus;
+
+    // Analog supply voltage
+    float analogSupplyVoltage;
+    SENSOR_STATUS_E analogSupplyVoltageStatus;
+
+    // Voltage divided reference
+    float referenceResistorVoltage;
+    SENSOR_STATUS_E referenceResistorVoltageStatus;
+
+
+    // Cell monitor local voltage statistics
     float maxCellVoltage;
     float minCellVoltage;
     float sumCellVoltage;
     float avgCellVoltage;
     uint32_t numBadCellVoltage;
 
+    // Cell monitor local temp statistics
     float maxCellTemp;
     float minCellTemp;
     float avgCellTemp;
     uint32_t numBadCellTemp;
 
-} Bmb_S;
+} Cell_Monitor_S;
 
 typedef struct
 {
-    Timer_S localPhaseCountTimer;
-    uint16_t lastPhaseCount;
+
+    /// Primary pack measurements
+
+    // Pack current
+    float packCurrent;
+    SENSOR_STATUS_E packCurrentStatus;
+
+    // Pack voltage
+    float packVoltage;
+    SENSOR_STATUS_E packVoltageStatus;
+
+    // Pack energy
+    float packPower;
+    SENSOR_STATUS_E packPowerStatus;
+
+    /// Auxillary pack measurements
+
+    // Board Temp
+    float boardTemp;
+    SENSOR_STATUS_E boardTempStatus;
+
+    // Shunt Temp 1
+    float shuntTemp1;
+    SENSOR_STATUS_E shuntTemp1Status;
+
+    // Shunt Temp 1
+    float shuntTemp2;
+    SENSOR_STATUS_E shuntTemp2Status;
+
+    // Precharge Temp
+    float prechargeTemp;
+    SENSOR_STATUS_E prechargeTempStatus;
+
+    // Discharge Temp
+    float dischargeTemp;
+    SENSOR_STATUS_E dischargeTempStatus;
+
+    // Link voltage
+    float linkVoltage;
+    SENSOR_STATUS_E linkVoltageStatus;
+
+    /// Diagnostic sensors
+
+    // Reference voltage
+    float referenceVoltage1P25;
+    SENSOR_STATUS_E referenceVoltage1P25Status;
+
+    // Die Temp 1
+    float dieTemp1;
+    SENSOR_STATUS_E dieTemp1Status;
+
+    // Regulator voltage
+    float regulatorVoltage;
+    SENSOR_STATUS_E regulatorVoltageStatus;
+
+    // Supply voltage
+    float supplyVoltage;
+    SENSOR_STATUS_E supplyVoltageStatus;
+
+    // Digital supply voltage
+    float digitalSupplyVoltage;
+    SENSOR_STATUS_E digitalSupplyVoltageStatus;
+
+    // Ground pad voltage
+    float groundPadVoltage;
+    SENSOR_STATUS_E groundPadVoltageStatus;
+
+    // Resistor reference
+    float referenceResistorVoltage;
+    SENSOR_STATUS_E referenceResistorVoltageStatus;
+
+    // Die temp 2
+    float dieTemp2;
+    SENSOR_STATUS_E dieTemp2Status;
+
+    
+    /// Calculated values
+
+    // Temperature adjusted shunt resistance
+    float shuntResistanceMicroOhms;
+
+    // Coulomb counter helper variables
+    // Timer_S localPhaseCountTimer;
+
+    // Conversion counter holds number of conversion counts over all time
     uint32_t adcConversionPhaseCounter;
-    uint32_t nextGoodAccumulationDataPhaseCount;
+    uint32_t nextQualifiedPhaseCount;
     float adcConversionTimeMS;
 
-    float shuntResistanceMicroOhms;
+    // SOC and SOE data
+    Soc_S socData;
+
+    // Pack energy data
+    int32_t packEnergyMilliJoules;
 } Pack_Monitor_S;
 
 
@@ -93,31 +206,14 @@ typedef struct
 {
     bool chainInitialized;
 
-	Bmb_S bmb[NUM_CELL_MON_IN_ACCUMULATOR];
-    Pack_Monitor_S packMonitorData;
-
-    ADC_DIAG_STATE_E curentDiagnosticState;
-    ADC_DIAG_STATE_E nextDiagnosticState;
-    uint32_t diagnosticCycleCounter;
+	Cell_Monitor_S bmb[NUM_CELL_MON_IN_ACCUMULATOR];
+    Pack_Monitor_S packMonitor;
 
     bool balancingEnabled;
 
     CHAIN_INFO_S chainInfo;
 
-    Soc_S socData;
-
-    float IADC1;
-    float IADC2;
-
-    float VBADC1;
-    float VBADC2;
-
-
-
-    uint8_t testData[NUM_DEVICES_IN_ACCUMULATOR][REGISTER_SIZE_BYTES];
-    TRANSACTION_STATUS_E testStatus[NUM_DEVICES_IN_ACCUMULATOR];
-
-    float packVoltage;
+    float cellSumVoltage;
 
     float maxCellVoltage;
     float minCellVoltage;

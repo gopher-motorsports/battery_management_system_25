@@ -17,9 +17,10 @@
 // The max spacing between two floats before they are considered not equal
 #define EPSILON 1e-4f
 
-#define MILLISECONDS_IN_SECOND  1000
-#define SECONDS_IN_MINUTE        60
-#define MINUTES_IN_HOUR          60
+#define MICROSECONDS_IN_MILLISECOND   1000
+#define MILLISECONDS_IN_SECOND        1000
+#define SECONDS_IN_MINUTE             60
+#define MINUTES_IN_HOUR               60
 
 /* ==================================================================== */
 /* ============================== MACROS ============================== */

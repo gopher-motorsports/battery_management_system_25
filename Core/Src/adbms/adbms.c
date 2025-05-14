@@ -180,9 +180,6 @@
 #define NUM_CELLV_REGISTERS 6
 #define NUM_AUXV_REGISTERS  4
 
-#define MAX_CELLV_SENSOR_VALUE  6.41505f
-#define MIN_CELLV_SENSOR_VALUE  -3.4152f
-
 #define MAX_OV_UV_VALUE         6.4128f
 #define MIN_OV_UV_VALUE         -3.4152f
 

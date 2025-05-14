@@ -27,9 +27,12 @@
 #define REGISTER_BYTE4      4
 #define REGISTER_BYTE5      5
 
-#define DEVICE_ID_MASK      0x7E
+#define DEVICE_ID_MASK      0x0E
 #define CELL_MONITOR_ID     0x06
 #define PACK_MONITOR_ID     0x0C
+
+#define MAX_CELLV_SENSOR_VALUE  6.41505f
+#define MIN_CELLV_SENSOR_VALUE  -3.4152f
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -622,17 +625,17 @@ typedef struct __attribute__((packed))
     ADBMS_StatusDPackMonitor statusGroupD;
     ADBMS_StatusEPackMonitor statusGroupE;
 
-    uint32_t currentAdc1uV;
-    uint32_t currentAdc2uV;
+    int32_t currentAdc1uV;
+    int32_t currentAdc2uV;
 
     float batteryVoltage1;
     float batteryVoltage2;
 
-    uint32_t currentAdcAccumulator1uV;
-    uint32_t currentAdcAccumulator2uV;
+    int32_t currentAdcAccumulator1uV;
+    int32_t currentAdcAccumulator2uV;
 
-    uint32_t batteryVoltageAccumulator1uV;
-    uint32_t batteryVoltageAccumulator2uV;
+    int32_t batteryVoltageAccumulator1uV;
+    int32_t batteryVoltageAccumulator2uV;
 
     float auxVoltage[NUM_PACK_AUX_VOLTAGES];
     float redundantAuxVoltage[NUM_PACK_RD_AUX_VOLTAGES];
