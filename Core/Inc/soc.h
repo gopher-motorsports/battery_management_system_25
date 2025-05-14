@@ -19,9 +19,6 @@ typedef struct
     uint32_t packMilliCoulombs;         // The millicoulomb capacity of the pack
     uint32_t milliCoulombCounter;       // The coulomb counter
 
-    uint32_t packMilliJoules;
-    uint32_t milliJouleCounter;
-
     float socByOcv;                     // The state of charge using open circuit voltage
     float soeByOcv;                     // The state of energy using open circuit voltage
     float socByCoulombCounting;         // The state of charge using coulomb counting
