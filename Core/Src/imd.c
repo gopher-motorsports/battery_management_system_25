@@ -61,51 +61,53 @@ void getImdStatus(imdData_S *imdData)
     // Check for loss of signal
     if((HAL_GetTick() - imdLastUpdate) > IMD_PWM_TIMOUT_MS)
 	{
-		return IMD_NO_SIGNAL;
+        imdData->imdStatus = IMD_NO_SIGNAL;
 	}
-
-    // Copy local of volatile variable
-    uint32_t localFrequency = imdFrequency;
-    uint32_t localDuty = imdDutyCycle;
-
-    // Clamp imd frequency to bounds
-    if(localFrequency >= IMD_MAX_FREQ_HZ)
+    else
     {
-        localFrequency =  IMD_MAX_FREQ_HZ;
-    }
-    else if(localFrequency <= IMD_MIN_FREQ_HZ)
-    {
-        localFrequency =  IMD_MIN_FREQ_HZ; 
-    }
+        // Copy local of volatile variable
+        uint32_t localFrequency = imdFrequency;
+        uint32_t localDuty = imdDutyCycle;
 
-    // Round imd frequency to nearest 10s place and convert to imd status
-    imdData->imdStatus = (IMD_Status_E)((localFrequency + 5) / 10);
-
-    // Check status to see if duty cycle data needs to be decoded
-    if((imdData->imdStatus == IMD_NORMAL) || (imdData->imdStatus == IMD_UNDER_VOLT))
-    {
-        // Under normal and undervolt status, calcuate the isolation resistance from the duty cycle
-        if(localDuty <= IMD_HIGH_RESISTANCE_DUTY_THRES)
+        // Clamp imd frequency to bounds
+        if(localFrequency >= IMD_MAX_FREQ_HZ)
         {
-            imdData->isolationResistance = IMD_HIGH_RESISTANCE_VALUE_KOHM;
+            localFrequency =  IMD_MAX_FREQ_HZ;
         }
-        else if(localDuty >= IMD_LOW_RESISTANCE_DUTY_THRES)
+        else if(localFrequency <= IMD_MIN_FREQ_HZ)
         {
-            imdData->isolationResistance = IMD_LOW_RESISTANCE_VALUE_KOHM;
+            localFrequency =  IMD_MIN_FREQ_HZ; 
         }
-        else
-        {
-            imdData->isolationResistance = GET_ISOLATION_RESISTANCE(localDuty);
-        }
-    }
-    else if(imdData->imdStatus == IMD_SPEED_START_MEASUREMENT)
-    {
-        // Under speed start status, check duty cycle for speed start success
-        imdData->speedStartSuccess = (imdDutyCycle < IMD_SPEED_START_PASS_DUTY_THRES);
 
-        if((imdData->speedStartSuccess) && (imdData->speedStartTime == 0))
+        // Round imd frequency to nearest 10s place and convert to imd status
+        imdData->imdStatus = (IMD_Status_E)((localFrequency + 5) / 10);
+
+        // Check status to see if duty cycle data needs to be decoded
+        if((imdData->imdStatus == IMD_NORMAL) || (imdData->imdStatus == IMD_UNDER_VOLT))
         {
-            imdData->speedStartTime = imdLastUpdate;
+            // Under normal and undervolt status, calcuate the isolation resistance from the duty cycle
+            if(localDuty <= IMD_HIGH_RESISTANCE_DUTY_THRES)
+            {
+                imdData->isolationResistance = IMD_HIGH_RESISTANCE_VALUE_KOHM;
+            }
+            else if(localDuty >= IMD_LOW_RESISTANCE_DUTY_THRES)
+            {
+                imdData->isolationResistance = IMD_LOW_RESISTANCE_VALUE_KOHM;
+            }
+            else
+            {
+                imdData->isolationResistance = GET_ISOLATION_RESISTANCE(localDuty);
+            }
+        }
+        else if(imdData->imdStatus == IMD_SPEED_START_MEASUREMENT)
+        {
+            // Under speed start status, check duty cycle for speed start success
+            imdData->speedStartSuccess = (imdDutyCycle < IMD_SPEED_START_PASS_DUTY_THRES);
+
+            if((imdData->speedStartSuccess) && (imdData->speedStartTime == 0))
+            {
+                imdData->speedStartTime = imdLastUpdate;
+            }
         }
     }
 }

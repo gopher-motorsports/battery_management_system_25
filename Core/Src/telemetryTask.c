@@ -824,22 +824,19 @@ void runTelemetryTask()
         Debug("Persistent Command Counter Error!\n");
     }
 
+    // Temp can logging testing
+    update_and_queue_param_float(&bmsBatteryCurrent_A, telemetryTaskDataLocal.packMonitor.packCurrent);
+    update_and_queue_param_float(&bmsBatteryVoltage_V, telemetryTaskDataLocal.packMonitor.packVoltage);
+    update_and_queue_param_float(&bmsTractiveSystemVoltage_V, telemetryTaskDataLocal.packMonitor.linkVoltage);
+
+    service_can_tx(&hcan2);
+
 
     // Regardless of whether or not chain initialized, run alert monitor stuff
 
     // Blah blah alert monitor
 
     // TODO Handle case of continous POR / CC errors here
-
-    static float val = 0.0f;
-    val += 0.1f;
-    if(val > 1000.0f)
-    {
-        val = 0.0f;
-    }
-
-    update_and_queue_param_float(&soeByOCV_percent, val);
-    service_can_tx(&hcan2);
 
     // Copy out new data into global data struct
     vTaskSuspendAll();

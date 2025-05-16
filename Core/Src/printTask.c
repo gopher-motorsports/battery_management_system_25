@@ -329,8 +329,10 @@ void runPrintTask()
     //         break;
     // }
 
-    // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+    printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
-    printf("SOE: %f\n", soeByOCV_percent.data);
+    printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+
+    // printf("SOE: %f\n", soeByOCV_percent.data);
 
 }
