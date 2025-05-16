@@ -8,6 +8,9 @@
 // The number of Cells in a cell brick
 #define NUM_PARALLEL_CELLS          1
 
+// Number of cells in series
+#define NUM_SERIES_CELLS            128
+
 // #define NUM_BATTERY_SEGMENTS        1
 
 #define PACK_MILLICOULOMBS          CELL_CAPACITY_MAH * NUM_PARALLEL_CELLS * MINUTES_IN_HOUR * SECONDS_IN_MINUTE
