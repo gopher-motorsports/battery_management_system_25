@@ -4,7 +4,7 @@ use_hw_timer: false # Disable hw timer based DMA update
 
 buckets:
     high_frequency_bms:
-        frequency_hz: 50
+        frequency_hz: 100
         parameters: 
             bmsBatteryCurrent_A:
                 ADC: NON_ADC
@@ -26,6 +26,12 @@ buckets:
                 ADC: NON_ADC
                 sensor: NON_ADC
                 samples_buffered: 1
+
+    # medium_frequency_bms:
+    #     frequency_hz: 10
+    #     parameters: 
+            
+
     low_frequency_bms:
         frequency_hz: 1
         parameters:

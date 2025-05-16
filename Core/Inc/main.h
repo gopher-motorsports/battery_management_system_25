@@ -37,6 +37,7 @@ extern "C" {
 #define TELEMETRY_TASK_PERIOD_MS      25
 #define PRINT_TASK_PERIOD_MS          1000
 #define STATUS_UPDATE_TASK_PERIOD_MS  10
+#define GCAN_UPDATE_TASK_PERIOD_MS    10
 
 /* USER CODE END Includes */
 

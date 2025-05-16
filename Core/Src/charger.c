@@ -17,8 +17,10 @@ extern CAN_HandleTypeDef hcan1;
 /* ==================================================================== */
 
 /*!
-  @brief   Send a CAN message to the charger requesting a charger enable or disable
-  @param   chargerState - A request to disable or enable the charger
+  @brief   Send a CAN message to the charger
+  @param   voltageRequest - Charger Voltage Request
+  @param   currentRequest - Charger Current Request
+  @param   enable - Enable/Disable Request
 */
 void sendChargerMessage(float voltageRequest, float currentRequest, bool enable)
 {

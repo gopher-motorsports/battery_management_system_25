@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include "printTask.h"
+#include "gcanUpdateTask.h"
 #include "utils.h"
 
 #include "GopherCAN.h"
@@ -74,7 +75,7 @@ osThreadId statusUpdateTasHandle;
 uint32_t statusUpdateTaskBuffer[ 128 ];
 osStaticThreadDef_t statusUpdateTaskControlBlock;
 osThreadId serviceGcanHandle;
-uint32_t serviceGcanTaskBuffer[ 128 ];
+uint32_t serviceGcanTaskBuffer[ 1024 ];
 osStaticThreadDef_t serviceGcanTaskControlBlock;
 /* USER CODE BEGIN PV */
 
@@ -308,7 +309,7 @@ int main(void)
   statusUpdateTasHandle = osThreadCreate(osThread(statusUpdateTas), NULL);
 
   /* definition and creation of serviceGcan */
-  osThreadStaticDef(serviceGcan, startServiceGcanTask, osPriorityNormal, 0, 128, serviceGcanTaskBuffer, &serviceGcanTaskControlBlock);
+  osThreadStaticDef(serviceGcan, startServiceGcanTask, osPriorityNormal, 0, 1024, serviceGcanTaskBuffer, &serviceGcanTaskControlBlock);
   serviceGcanHandle = osThreadCreate(osThread(serviceGcan), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -947,11 +948,14 @@ void startStatusUpdateTask(void const * argument)
 void startServiceGcanTask(void const * argument)
 {
   /* USER CODE BEGIN startServiceGcanTask */
+  initGcanUpdateTask();
+  TickType_t lastGcanUpdateTaskTick;
+  const TickType_t gcanUpdateTaskPeriod = pdMS_TO_TICKS(GCAN_UPDATE_TASK_PERIOD_MS);
   /* Infinite loop */
   for(;;)
   {
-    service_can_rx_buffer();
-    osDelay(1);
+    runGcanUpdateTask();
+    vTaskDelayUntil(&lastGcanUpdateTaskTick, gcanUpdateTaskPeriod);
   }
   /* USER CODE END startServiceGcanTask */
 }

@@ -15,8 +15,6 @@
 #include "GopherCAN.h"
 #include "gopher_sense.h"
 
-extern CAN_HandleTypeDef hcan2;
-
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
@@ -825,11 +823,11 @@ void runTelemetryTask()
     }
 
     // Temp can logging testing
-    update_and_queue_param_float(&bmsBatteryCurrent_A, telemetryTaskDataLocal.packMonitor.packCurrent);
-    update_and_queue_param_float(&bmsBatteryVoltage_V, telemetryTaskDataLocal.packMonitor.packVoltage);
-    update_and_queue_param_float(&bmsTractiveSystemVoltage_V, telemetryTaskDataLocal.packMonitor.linkVoltage);
+    // update_and_queue_param_float(&bmsBatteryCurrent_A, telemetryTaskDataLocal.packMonitor.packCurrent);
+    // update_and_queue_param_float(&bmsBatteryVoltage_V, telemetryTaskDataLocal.packMonitor.packVoltage);
+    // update_and_queue_param_float(&bmsTractiveSystemVoltage_V, telemetryTaskDataLocal.packMonitor.linkVoltage);
 
-    service_can_tx(&hcan2);
+    // service_can_tx(&hcan2);
 
 
     // Regardless of whether or not chain initialized, run alert monitor stuff

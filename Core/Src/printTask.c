@@ -331,7 +331,10 @@ void runPrintTask()
 
     printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
-    printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+    // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+
+    printf("Charger Status: %X\n", chargerStatusByte.data);
+    printf("Power Limit: %f\n", chargingPowerLimit.data);
 
     // printf("SOE: %f\n", soeByOCV_percent.data);
 
