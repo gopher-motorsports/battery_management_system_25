@@ -77,10 +77,14 @@ osStaticThreadDef_t statusUpdateTaskControlBlock;
 osThreadId serviceGcanHandle;
 uint32_t serviceGcanTaskBuffer[ 1024 ];
 osStaticThreadDef_t serviceGcanTaskControlBlock;
+osThreadId chargerTaskHandle;
+uint32_t chargerTaskBuffer[ 1024 ];
+osStaticThreadDef_t chargerTaskControlBlock;
 /* USER CODE BEGIN PV */
 
 telemetryTaskData_S telemetryTaskData;
 statusUpdateTaskData_S statusUpdateTaskData;
+CHARGER_STATE_E chargerState;
 
 volatile bool usDelayActive;
 
@@ -108,6 +112,7 @@ void startTelemetryTask(void const * argument);
 void startPrintTask(void const * argument);
 void startStatusUpdateTask(void const * argument);
 void startServiceGcanTask(void const * argument);
+void startChargerTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 #ifdef __GNUC__
@@ -311,6 +316,10 @@ int main(void)
   /* definition and creation of serviceGcan */
   osThreadStaticDef(serviceGcan, startServiceGcanTask, osPriorityNormal, 0, 1024, serviceGcanTaskBuffer, &serviceGcanTaskControlBlock);
   serviceGcanHandle = osThreadCreate(osThread(serviceGcan), NULL);
+
+  /* definition and creation of chargerTask */
+  osThreadStaticDef(chargerTask, startChargerTask, osPriorityAboveNormal, 0, 1024, chargerTaskBuffer, &chargerTaskControlBlock);
+  chargerTaskHandle = osThreadCreate(osThread(chargerTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -958,6 +967,28 @@ void startServiceGcanTask(void const * argument)
     vTaskDelayUntil(&lastGcanUpdateTaskTick, gcanUpdateTaskPeriod);
   }
   /* USER CODE END startServiceGcanTask */
+}
+
+/* USER CODE BEGIN Header_startChargerTask */
+/**
+* @brief Function implementing the chargerTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startChargerTask */
+void startChargerTask(void const * argument)
+{
+  /* USER CODE BEGIN startChargerTask */
+  initChargerTask();
+  TickType_t lastChargerTaskTick;
+  const TickType_t chargerTaskPeriod = pdMS_TO_TICKS(CHARGER_TASK_PERIOD_MS);
+  /* Infinite loop */
+  for(;;)
+  {
+    runChargerTask();
+    vTaskDelayUntil(&lastChargerTaskTick, chargerTaskPeriod);
+  }
+  /* USER CODE END startChargerTask */
 }
 
 /**

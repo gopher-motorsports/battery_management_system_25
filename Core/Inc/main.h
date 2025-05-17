@@ -33,11 +33,13 @@ extern "C" {
 /* USER CODE BEGIN Includes */
 #include "telemetryTask.h"
 #include "statusUpdateTask.h"
+#include "chargerTask.h"
 
 #define TELEMETRY_TASK_PERIOD_MS      25
 #define PRINT_TASK_PERIOD_MS          1000
 #define STATUS_UPDATE_TASK_PERIOD_MS  10
 #define GCAN_UPDATE_TASK_PERIOD_MS    10
+#define CHARGER_TASK_PERIOD_MS    100
 
 /* USER CODE END Includes */
 
@@ -135,6 +137,7 @@ void Error_Handler(void);
 
 extern telemetryTaskData_S telemetryTaskData;
 extern statusUpdateTaskData_S statusUpdateTaskData;
+extern CHARGER_STATE_E chargerState;
 
 /* USER CODE END Private defines */
 

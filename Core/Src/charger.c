@@ -35,16 +35,7 @@ void sendChargerMessage(float voltageRequest, float currentRequest, bool enable)
     TxHeader.DLC = 8;                   // 8 Bytes of data
 
     if(enable)
-    {
-        if(voltageRequest > MAX_CHARGE_VOLTAGE_V)
-        {
-            voltageRequest = MAX_CHARGE_VOLTAGE_V;
-        }
-        if(currentRequest > MAX_CHARGE_CURRENT_A)
-        {
-            currentRequest = MAX_CHARGE_CURRENT_A;
-        }
-        
+    {        
         // Encode voltage and current requests
         // [0] Voltage*10 HIGH Byte
         // [1] Voltage*10 LOW Byte
