@@ -37,6 +37,8 @@ static void printPackMonDiag(Pack_Monitor_S* packMon);
 
 static void printImdData(imdData_S* imdData);
 
+static void printCharger(CHARGER_STATE_E chargerState);
+
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
@@ -261,6 +263,58 @@ static void printImdData(imdData_S* imdData)
     printf("Isolation Resistance (Kohm): %lu\n\n", imdData->isolationResistance);
 }
 
+static void printCharger(CHARGER_STATE_E chargerState)
+{
+    printf("\n");
+    printf("Charger state: ");
+    switch(chargerState)
+    {
+        case CHARGER_STATE_DISCONNECTED:
+            printf("DISCONNETED\n");
+            break;
+        case CHARGER_STATE_CONSTANT_CURRENT:
+            printf("CONSTANT CURRENT\n");
+            break;
+        case CHARGER_STATE_CONSTANT_VOLTAGE:
+            printf("CONSTANT VOLTAGE\n");
+            break;
+        case CHARGER_STATE_BALANCING:
+            printf("BALANCING\n");
+            break;
+        case CHARGER_STATE_COMPLETE:
+            printf("CHARGE COMPLETE\n");
+            break;
+
+        default:
+            break;
+    }
+
+    printf("Charger Voltage %f\n", chargerVoltageSetPoint_V.data);
+    printf("Charger Current %f\n", chargerCurrentSetPoint_A);
+
+    uint8_t chargerStatus = chargerStatusByte.data;
+    if(chargerStatus & 0x01)
+    {
+        printf("Charger hardware Failure\n");
+    }
+    if(chargerStatus & 0x02)
+    {
+        printf("Charger Over Temp\n");
+    }
+    if(chargerStatus & 0x04)
+    {
+        printf("Charger Wrong Input Voltage\n");
+    }
+    if(chargerStatus & 0x08)
+    {
+        printf("Charger No Battery\n");
+    }
+    if(chargerStatus & 0x10)
+    {
+        printf("Charger No Comms\n");
+    }
+}
+
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
@@ -276,14 +330,15 @@ void runPrintTask()
     vTaskSuspendAll();
     printTaskInputData.telemetryTaskData = telemetryTaskData;
     printTaskInputData.statusUpdateTaskData = statusUpdateTaskData;
+    CHARGER_STATE_E chargerStateLocal = chargerState;
     xTaskResumeAll();
 
     // Clear terminal output
     printf("\e[1;1H\e[2J");
 
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    // printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
-    // printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
+    printCellTemps(printTaskInputData.telemetryTaskData.bmb);
     // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
     // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
     // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
@@ -332,9 +387,14 @@ void runPrintTask()
     printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
     // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+    for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)
+    {
+        printf("SDC%lu: %d\n", i, printTaskInputData.statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
+    }
 
-    printf("Charger Status: %X\n", chargerStatusByte.data);
     printf("Power Limit: %f\n", chargingPowerLimit.data);
+
+    printCharger(chargerStateLocal);
 
     // printf("SOE: %f\n", soeByOCV_percent.data);
 

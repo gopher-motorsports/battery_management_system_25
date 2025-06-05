@@ -218,7 +218,6 @@ void setAmsFault(bool set)
 {
 	// AMS fault pin is active low so if set == true then pin should be low
 	HAL_GPIO_WritePin(AMS_FAULT_N_GPIO_Port, AMS_FAULT_N_Pin, set ? GPIO_PIN_RESET : GPIO_PIN_SET);
-	return;
 }
 
 /* ==================================================================== */
