@@ -138,17 +138,17 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
     batteryData.chainInfo.localCommandCounter[CELL_MONITOR] = 0;
     batteryData.chainInfo.localCommandCounter[PACK_MONITOR] = 0;
 
-    status = readSerialId(&batteryData);
-    if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        return status;
-    }
+    // status = readSerialId(&batteryData);
+    // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
+    // {
+    //     return status;
+    // }
 
-    // TODO return error if 2 or 0 pack monitors found
-    if((batteryData.cellMonitor[NUM_CELL_MON_IN_ACCUMULATOR - 1].serialId[REGISTER_BYTE0] & DEVICE_ID_MASK) == PACK_MONITOR_ID)
-    {
-        batteryData.chainInfo.packMonitorPort = PORTB;
-    }
+    // // TODO return error if 2 or 0 pack monitors found
+    // if((batteryData.cellMonitor[NUM_CELL_MON_IN_ACCUMULATOR - 1].serialId[REGISTER_BYTE0] & DEVICE_ID_MASK) == PACK_MONITOR_ID)
+    // {
+    //     batteryData.chainInfo.packMonitorPort = PORTB;
+    // }
 
     // Set configuration for Group A
 
@@ -316,7 +316,7 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData)
 
         return TRANSACTION_POR_ERROR;
     }
-    
+
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
         // Check for sleepy BMBs
@@ -415,14 +415,14 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData)
             float deltaTimerPhaseCounts = ((float)deltaTimerUS / MICROSECONDS_IN_MILLISECOND) * PHASE_COUNTS_PER_CONVERSION;
 
             taskData->packMonitor.adcConversionTimeMS = (deltaTimerPhaseCounts) / (deltaCounter);
-            
+
         }
         else
         {
             // Do nothing?? Let it be 0 or unchanged?
             // taskData->packMonitor.adcConversionTimeMS = 1.0f;
         }
-    
+
     }
     else
     {
@@ -482,7 +482,7 @@ static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData
     taskData->packMonitor.dischargeTempStatus = GOOD;
 
     // TODO SET DIFF ADC
-    // Link voltage 
+    // Link voltage
     // Link+ and Link- measured referenced to 1.25v ref, subtract to get link voltage
     float linkVoltage = LINK_DIVIDER_INV_GAIN * (batteryData.packMonitor.auxVoltage[LINK_PLUS_AUX_INDEX] - batteryData.packMonitor.auxVoltage[LINK_MINUS_AUX_INDEX]);
     taskData->packMonitor.linkVoltage = linkVoltage;
@@ -522,7 +522,7 @@ static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData
     }
 
     return status;
-    
+
 }
 
 static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *taskData)
