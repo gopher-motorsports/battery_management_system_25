@@ -14,6 +14,7 @@
 #include <string.h>
 #include "GopherCAN.h"
 #include "gopher_sense.h"
+#include "alerts.h"
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -78,6 +79,8 @@
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
+static void runTelemetryAlertMonitor(telemetryTaskData_S *telemetryData);
+
 // static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Cell_Monitor_S *bmbArray, bool diagnosticAdc);
 // static void convertCellTempRegister(uint8_t *bmbData, uint32_t cellStartIndex, Cell_Monitor_S *bmbArray);
 
@@ -115,6 +118,35 @@
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
+
+static void runTelemetryAlertMonitor(telemetryTaskData_S *telemetryData)
+{
+    // Accumulate alert statuses
+    bool responseStatus[NUM_ALERT_RESPONSES] = {false};
+
+    for(int32_t i = 0; i < NUM_TELEMETRY_ALERTS; i++)
+    {
+        Alert_S* alert = telemetryAlerts[i];
+
+        // Check alert condition and run alert monitor
+        alert->alertConditionPresent = telemetryAlertConditionArray[i](telemetryData);
+        runAlertMonitor(alert);
+
+        // Get alert status and set response
+        const AlertStatus_E alertStatus = getAlertStatus(alert);
+        if((alertStatus == ALERT_SET) || (alertStatus == ALERT_LATCHED))
+        {
+            // Iterate through all alert responses and set them
+            for (uint32_t j = 0; j < alert->numAlertResponse; j++)
+            {
+                const AlertResponse_E response = alert->alertResponse[j];
+                // Set the alert response to active
+                responseStatus[response] = true;
+            }
+        }
+    }
+    setAmsFault(responseStatus[AMS_FAULT]);
+}
 
 // static void convertCellVoltageRegister(uint8_t *bmbData, uint32_t cellStartIndex, Cell_Monitor_S *bmbArray, bool diagnosticAdc)
 // {
@@ -832,7 +864,8 @@ void runTelemetryTask()
 
     // Regardless of whether or not chain initialized, run alert monitor stuff
 
-    // Blah blah alert monitor
+    // Alert Monitor
+    runTelemetryAlertMonitor(&telemetryTaskDataLocal);
 
     // TODO Handle case of continous POR / CC errors here
 

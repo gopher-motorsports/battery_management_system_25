@@ -6,6 +6,7 @@
 /* ==================================================================== */
 
 #include "imd.h"
+#include <stdbool.h>
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -19,10 +20,10 @@
 
 typedef struct
 {
-    uint8_t imdLatchOpen;
-    uint8_t bmsLatchOpen;
-    uint8_t bmsInhibitActive;
-    uint8_t sdcSenseFaultActive[NUM_SDC_SENSE_INPUTS];
+    bool imdLatchOpen;
+    bool bmsLatchOpen;
+    bool bmsInhibitActive;
+    bool sdcSenseFaultActive[NUM_SDC_SENSE_INPUTS];
 } shutdownCircuitStatus_S;
 
 typedef struct
