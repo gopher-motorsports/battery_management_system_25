@@ -24,9 +24,11 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include "printTask.h"
+#include "gcanUpdateTask.h"
 #include "utils.h"
 
 #include "GopherCAN.h"
+#include "gopher_sense.h"
 
 /* USER CODE END Includes */
 
@@ -46,13 +48,16 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-
+CAN_HandleTypeDef hcan1;
 CAN_HandleTypeDef hcan2;
 
+I2C_HandleTypeDef hi2c3;
+
 SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef hspi2;
 DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
+DMA_HandleTypeDef hdma_spi2_tx;
 
 TIM_HandleTypeDef htim5;
 TIM_HandleTypeDef htim7;
@@ -70,12 +75,16 @@ osThreadId statusUpdateTasHandle;
 uint32_t statusUpdateTaskBuffer[ 128 ];
 osStaticThreadDef_t statusUpdateTaskControlBlock;
 osThreadId serviceGcanHandle;
-uint32_t serviceGcanTaskBuffer[ 128 ];
+uint32_t serviceGcanTaskBuffer[ 1024 ];
 osStaticThreadDef_t serviceGcanTaskControlBlock;
+osThreadId chargerTaskHandle;
+uint32_t chargerTaskBuffer[ 1024 ];
+osStaticThreadDef_t chargerTaskControlBlock;
 /* USER CODE BEGIN PV */
 
 telemetryTaskData_S telemetryTaskData;
 statusUpdateTaskData_S statusUpdateTaskData;
+CHARGER_STATE_E chargerState;
 
 volatile bool usDelayActive;
 
@@ -96,11 +105,14 @@ static void MX_CAN2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM9_Init(void);
 static void MX_TIM5_Init(void);
-static void MX_ADC1_Init(void);
+static void MX_CAN1_Init(void);
+static void MX_SPI2_Init(void);
+static void MX_I2C3_Init(void);
 void startTelemetryTask(void const * argument);
 void startPrintTask(void const * argument);
 void startStatusUpdateTask(void const * argument);
 void startServiceGcanTask(void const * argument);
+void startChargerTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 #ifdef __GNUC__
@@ -254,7 +266,9 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM9_Init();
   MX_TIM5_Init();
-  MX_ADC1_Init();
+  MX_CAN1_Init();
+  MX_SPI2_Init();
+  MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
 
   // Start IMD input capture
@@ -264,8 +278,9 @@ int main(void)
   // Start global timebase uS timer
   HAL_TIM_Base_Start(&htim5);
 
+  init_can(&hcan1, GCAN2);
   init_can(&hcan2, GCAN0);
-  gsense_init(&hcan2, &hadc1, 0, 0, MCU_GSENSE_GPIO_Port, MCU_GSENSE_Pin);
+  gsense_init(&hcan2, MCU_GSENSE_GPIO_Port, MCU_GSENSE_Pin);
 
   /* USER CODE END 2 */
 
@@ -299,8 +314,12 @@ int main(void)
   statusUpdateTasHandle = osThreadCreate(osThread(statusUpdateTas), NULL);
 
   /* definition and creation of serviceGcan */
-  osThreadStaticDef(serviceGcan, startServiceGcanTask, osPriorityNormal, 0, 128, serviceGcanTaskBuffer, &serviceGcanTaskControlBlock);
+  osThreadStaticDef(serviceGcan, startServiceGcanTask, osPriorityNormal, 0, 1024, serviceGcanTaskBuffer, &serviceGcanTaskControlBlock);
   serviceGcanHandle = osThreadCreate(osThread(serviceGcan), NULL);
+
+  /* definition and creation of chargerTask */
+  osThreadStaticDef(chargerTask, startChargerTask, osPriorityAboveNormal, 0, 1024, chargerTaskBuffer, &chargerTaskControlBlock);
+  chargerTaskHandle = osThreadCreate(osThread(chargerTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -369,54 +388,39 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief ADC1 Initialization Function
+  * @brief CAN1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_ADC1_Init(void)
+static void MX_CAN1_Init(void)
 {
 
-  /* USER CODE BEGIN ADC1_Init 0 */
+  /* USER CODE BEGIN CAN1_Init 0 */
 
-  /* USER CODE END ADC1_Init 0 */
+  /* USER CODE END CAN1_Init 0 */
 
-  ADC_ChannelConfTypeDef sConfig = {0};
+  /* USER CODE BEGIN CAN1_Init 1 */
 
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
-
-  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-  */
-  hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
-  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc1.Init.ScanConvMode = DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
-  hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
-  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  /* USER CODE END CAN1_Init 1 */
+  hcan1.Instance = CAN1;
+  hcan1.Init.Prescaler = 8;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_6TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan1.Init.TimeTriggeredMode = DISABLE;
+  hcan1.Init.AutoBusOff = ENABLE;
+  hcan1.Init.AutoWakeUp = ENABLE;
+  hcan1.Init.AutoRetransmission = DISABLE;
+  hcan1.Init.ReceiveFifoLocked = DISABLE;
+  hcan1.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan1) != HAL_OK)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN CAN1_Init 2 */
 
-  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-  */
-  sConfig.Channel = ADC_CHANNEL_0;
-  sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN ADC1_Init 2 */
-
-  /* USER CODE END ADC1_Init 2 */
+  /* USER CODE END CAN1_Init 2 */
 
 }
 
@@ -458,6 +462,40 @@ static void MX_CAN2_Init(void)
 }
 
 /**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.ClockSpeed = 100000;
+  hi2c3.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
+
+}
+
+/**
   * @brief SPI1 Initialization Function
   * @param None
   * @retval None
@@ -492,6 +530,44 @@ static void MX_SPI1_Init(void)
   /* USER CODE BEGIN SPI1_Init 2 */
 
   /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
+  * @brief SPI2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI2_Init(void)
+{
+
+  /* USER CODE BEGIN SPI2_Init 0 */
+
+  /* USER CODE END SPI2_Init 0 */
+
+  /* USER CODE BEGIN SPI2_Init 1 */
+
+  /* USER CODE END SPI2_Init 1 */
+  /* SPI2 parameter configuration*/
+  hspi2.Instance = SPI2;
+  hspi2.Init.Mode = SPI_MODE_MASTER;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.NSS = SPI_NSS_SOFT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi2.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI2_Init 2 */
+
+  /* USER CODE END SPI2_Init 2 */
 
 }
 
@@ -686,8 +762,12 @@ static void MX_DMA_Init(void)
 
   /* DMA controller clock enable */
   __HAL_RCC_DMA2_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Stream4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
   /* DMA2_Stream2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
@@ -713,39 +793,75 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, AMS_FAULT_N_Pin|MCU_GSENSE_Pin|MCU_FAULT_Pin|MCU_HEARTBEAT_Pin
-                          |PORTB_CS_Pin, GPIO_PIN_RESET);
+                          |PORTB_CS_Pin|EPAP_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(PORTA_CS_GPIO_Port, PORTA_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, FAN2_MAX_N_Pin|PORTA_CS_Pin|EPAD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(AMS_INB_N_GPIO_Port, AMS_INB_N_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, FAN1_MAX_N_Pin|EPAP_CS_Pin|EPAP_DC_Pin|EPAD1_Pin
+                          |AMS_INB_N_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : AMS_FAULT_READ_Pin IMD_FAULT_READ_Pin PORTA_WAKE_Pin SDC4_Pin
+                           SDC3_Pin SDC2_Pin */
+  GPIO_InitStruct.Pin = AMS_FAULT_READ_Pin|IMD_FAULT_READ_Pin|PORTA_WAKE_Pin|SDC4_Pin
+                          |SDC3_Pin|SDC2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : AMS_FAULT_N_Pin MCU_GSENSE_Pin MCU_FAULT_Pin MCU_HEARTBEAT_Pin
-                           PORTB_CS_Pin */
+                           PORTB_CS_Pin EPAP_RST_Pin */
   GPIO_InitStruct.Pin = AMS_FAULT_N_Pin|MCU_GSENSE_Pin|MCU_FAULT_Pin|MCU_HEARTBEAT_Pin
-                          |PORTB_CS_Pin;
+                          |PORTB_CS_Pin|EPAP_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PORTA_CS_Pin */
-  GPIO_InitStruct.Pin = PORTA_CS_Pin;
+  /*Configure GPIO pins : FAN2_MAX_N_Pin PORTA_CS_Pin EPAD2_Pin */
+  GPIO_InitStruct.Pin = FAN2_MAX_N_Pin|PORTA_CS_Pin|EPAD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(PORTA_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : AMS_INB_N_Pin */
-  GPIO_InitStruct.Pin = AMS_INB_N_Pin;
+  /*Configure GPIO pins : PORTB_WAKE_Pin FAN2_FAULT_N_Pin FAN1_FAULT_N_Pin SDC0_Pin */
+  GPIO_InitStruct.Pin = PORTB_WAKE_Pin|FAN2_FAULT_N_Pin|FAN1_FAULT_N_Pin|SDC0_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : FAN1_MAX_N_Pin EPAP_CS_Pin EPAP_DC_Pin EPAD1_Pin
+                           AMS_INB_N_Pin */
+  GPIO_InitStruct.Pin = FAN1_MAX_N_Pin|EPAP_CS_Pin|EPAP_DC_Pin|EPAD1_Pin
+                          |AMS_INB_N_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(AMS_INB_N_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : EPAP_OC_N_Pin SDC5_Pin */
+  GPIO_InitStruct.Pin = EPAP_OC_N_Pin|SDC5_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : SDC1_Pin */
+  GPIO_InitStruct.Pin = SDC1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(SDC1_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -841,13 +957,38 @@ void startStatusUpdateTask(void const * argument)
 void startServiceGcanTask(void const * argument)
 {
   /* USER CODE BEGIN startServiceGcanTask */
+  initGcanUpdateTask();
+  TickType_t lastGcanUpdateTaskTick;
+  const TickType_t gcanUpdateTaskPeriod = pdMS_TO_TICKS(GCAN_UPDATE_TASK_PERIOD_MS);
   /* Infinite loop */
   for(;;)
   {
-    service_can_rx_buffer();
-    osDelay(1);
+    runGcanUpdateTask();
+    vTaskDelayUntil(&lastGcanUpdateTaskTick, gcanUpdateTaskPeriod);
   }
   /* USER CODE END startServiceGcanTask */
+}
+
+/* USER CODE BEGIN Header_startChargerTask */
+/**
+* @brief Function implementing the chargerTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startChargerTask */
+void startChargerTask(void const * argument)
+{
+  /* USER CODE BEGIN startChargerTask */
+  initChargerTask();
+  TickType_t lastChargerTaskTick;
+  const TickType_t chargerTaskPeriod = pdMS_TO_TICKS(CHARGER_TASK_PERIOD_MS);
+  /* Infinite loop */
+  for(;;)
+  {
+    runChargerTask();
+    vTaskDelayUntil(&lastChargerTaskTick, chargerTaskPeriod);
+  }
+  /* USER CODE END startChargerTask */
 }
 
 /**
