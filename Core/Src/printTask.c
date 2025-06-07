@@ -8,6 +8,7 @@
 #include "statusUpdateTask.h"
 #include "cmsis_os.h"
 #include <stdio.h>
+#include "GopherCAN.h"
 
 /* ==================================================================== */
 /* ============================== STRUCTS ============================= */
@@ -35,6 +36,8 @@ static void printEnergyData(Pack_Monitor_S* packMon);
 static void printPackMonDiag(Pack_Monitor_S* packMon);
 
 static void printImdData(imdData_S* imdData);
+
+static void printCharger(CHARGER_STATE_E chargerState);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
@@ -260,6 +263,58 @@ static void printImdData(imdData_S* imdData)
     printf("Isolation Resistance (Kohm): %lu\n\n", imdData->isolationResistance);
 }
 
+static void printCharger(CHARGER_STATE_E chargerState)
+{
+    printf("\n");
+    printf("Charger state: ");
+    switch(chargerState)
+    {
+        case CHARGER_STATE_DISCONNECTED:
+            printf("DISCONNETED\n");
+            break;
+        case CHARGER_STATE_CONSTANT_CURRENT:
+            printf("CONSTANT CURRENT\n");
+            break;
+        case CHARGER_STATE_CONSTANT_VOLTAGE:
+            printf("CONSTANT VOLTAGE\n");
+            break;
+        case CHARGER_STATE_BALANCING:
+            printf("BALANCING\n");
+            break;
+        case CHARGER_STATE_COMPLETE:
+            printf("CHARGE COMPLETE\n");
+            break;
+
+        default:
+            break;
+    }
+
+    printf("Charger Voltage %f\n", chargerVoltageSetPoint_V.data);
+    printf("Charger Current %f\n", chargerCurrentSetPoint_A);
+
+    uint8_t chargerStatus = chargerStatusByte.data;
+    if(chargerStatus & 0x01)
+    {
+        printf("Charger hardware Failure\n");
+    }
+    if(chargerStatus & 0x02)
+    {
+        printf("Charger Over Temp\n");
+    }
+    if(chargerStatus & 0x04)
+    {
+        printf("Charger Wrong Input Voltage\n");
+    }
+    if(chargerStatus & 0x08)
+    {
+        printf("Charger No Battery\n");
+    }
+    if(chargerStatus & 0x10)
+    {
+        printf("Charger No Comms\n");
+    }
+}
+
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
@@ -275,21 +330,72 @@ void runPrintTask()
     vTaskSuspendAll();
     printTaskInputData.telemetryTaskData = telemetryTaskData;
     printTaskInputData.statusUpdateTaskData = statusUpdateTaskData;
+    CHARGER_STATE_E chargerStateLocal = chargerState;
     xTaskResumeAll();
 
     // Clear terminal output
     printf("\e[1;1H\e[2J");
 
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    // printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
-    // printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
+    printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
+    // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
+    // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
+    // printf("VBADC2: %f\n", printTaskInputData.telemetryTaskData.VBADC2);
 
-    // Print cell stats
-    // printCellStats(printTaskInputData.telemetryTaskData.bmb);
+    // printf("\n");
+    // printf("Max Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.maxCellVoltage);
+    // printf("Min Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.minCellVoltage);
+    // printf("Max Cell Temp: %f\n", printTaskInputData.telemetryTaskData.maxCellTemp);
+    // printf("Min Cell Temp: %f\n", printTaskInputData.telemetryTaskData.minCellTemp);
 
-    // Print all pack mon
+    // printf("\n");
+    // printf("SOC by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.socByOcv * 100.0f);
+    // printf("SOE by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.soeByOcv * 100.0f);
+    // printf("\n");
+    // printf("Millicoulomb Counter: %lu\n", printTaskInputData.telemetryTaskData.socData.milliCoulombCounter);
+    // printf("SOC by CC: %f\n", printTaskInputData.telemetryTaskData.socData.socByCoulombCounting * 100.0f);
+    // printf("SOE by CC: %f\n", printTaskInputData.telemetryTaskData.socData.soeByCoulombCounting * 100.0f);
+
+    // printf("\n");
+    // printf("Conversion Phase Counter: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.localPhaseCountTimer.timCount * 4);
+    // printf("ICNTPHA: %lu\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionPhaseCounter);
+    // printf("IADC Conversion Time: %f\n", printTaskInputData.telemetryTaskData.packMonitorData.adcConversionTimeMS);
+
+    // printf("\n");
+    // printf("Diagnostic state: ");
+    // switch(printTaskInputData.telemetryTaskData.curentDiagnosticState)
+    // {
+    //     case REDUNDANT_ADC_DIAG_STATE:
+    //         printf("REDUNDANT\n");
+    //         break;
+    //     case BALANCING_DIAG_STATE:
+    //         printf("BALANCING\n");
+    //         break;
+    //     case OPEN_WIRE_EVEN_DIAG_STATE:
+    //         printf("OPEN WIRE EVEN\n");
+    //         break;
+    //     case OPEN_WIRE_ODD_DIAG_STATE:
+    //         printf("OPEN WIRE ODD\n");
+    //         break;
+
+    //     default:
+    //         break;
+    // }
+
     printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
     // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
+    for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)
+    {
+        printf("SDC%lu: %d\n", i, printTaskInputData.statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
+    }
+
+    printf("Power Limit: %f\n", chargingPowerLimit.data);
+
+    printCharger(chargerStateLocal);
+
+    // printf("SOE: %f\n", soeByOCV_percent.data);
 
 }

@@ -636,7 +636,6 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
         {
             // Update statistics
             updateBatteryStatistics(taskData);
-            taskData->minCellVoltage = 4.1f;
 
             // Update SOC
             updateSocSoe(&taskData->packMonitor.socData, taskData->minCellVoltage);

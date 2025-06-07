@@ -15,7 +15,7 @@
             "command": "python",
             "args": [
                 "autogen.py",
-                "configs/go4-24e.yaml"
+                "configs/go4-25.yaml"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/../gophercan-lib/network_autogen"
