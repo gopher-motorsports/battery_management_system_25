@@ -131,12 +131,19 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
     // Reset chain info struct to default values
     batteryData.chainInfo.numDevs = NUM_DEVICES_IN_ACCUMULATOR;
     batteryData.chainInfo.packMonitorPort = PORTA;
-    batteryData.chainInfo.chainStatus = CHAIN_COMPLETE;
+    batteryData.chainInfo.chainStatus = MULTIPLE_CHAIN_BREAK;
     batteryData.chainInfo.availableDevices[PORTA] = NUM_DEVICES_IN_ACCUMULATOR;
     batteryData.chainInfo.availableDevices[PORTB] = NUM_DEVICES_IN_ACCUMULATOR;
     batteryData.chainInfo.currentPort = PORTA;
     batteryData.chainInfo.localCommandCounter[CELL_MONITOR] = 0;
     batteryData.chainInfo.localCommandCounter[PACK_MONITOR] = 0;
+
+
+    status = checkChainStatus(&batteryData);
+    if(status == TRANSACTION_SPI_ERROR)
+    {
+        return status;
+    }
 
     // status = readSerialId(&batteryData);
     // if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
