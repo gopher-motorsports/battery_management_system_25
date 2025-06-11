@@ -833,6 +833,7 @@ void runTelemetryTask()
     // Copy in last cycles data into local data struct
     vTaskSuspendAll();
     telemetryTaskDataLocal = telemetryTaskData;
+    telemetryTaskDataLocal.balancingEnabled = (chargerState == CHARGER_STATE_BALANCING);
     xTaskResumeAll();
 
     TRANSACTION_STATUS_E telemetryStatus = updateBatteryTelemetry(&telemetryTaskDataLocal);
@@ -853,14 +854,6 @@ void runTelemetryTask()
     {
         Debug("Persistent Command Counter Error!\n");
     }
-
-    // Temp can logging testing
-    // update_and_queue_param_float(&bmsBatteryCurrent_A, telemetryTaskDataLocal.packMonitor.packCurrent);
-    // update_and_queue_param_float(&bmsBatteryVoltage_V, telemetryTaskDataLocal.packMonitor.packVoltage);
-    // update_and_queue_param_float(&bmsTractiveSystemVoltage_V, telemetryTaskDataLocal.packMonitor.linkVoltage);
-
-    // service_can_tx(&hcan2);
-
 
     // Regardless of whether or not chain initialized, run alert monitor stuff
 

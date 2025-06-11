@@ -54,7 +54,6 @@
 
 #define CONVERSION_BUFFER_SIZE          100
 
-
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
 /* ==================================================================== */
@@ -255,6 +254,16 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
     // If a correction occurs, and a POR or command counter error is detected as a result, that will be returned by status
     status = checkChainStatus(&batteryData);
 
+    // If charging is enabled, mute balancing, wait 2ms to ensure a new conversion finishes, then toggle freeze
+    if(taskData->balancingEnabled)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = muteDischarge(&batteryData);
+            vTaskDelay(2);
+        }
+    } 
+
     // Unfreeze read registers
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
@@ -271,6 +280,14 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
         conversionCounterBuffer[TIMER_INDEX][counterBufferIndex] = __HAL_TIM_GetCounter(&htim5);
+    }
+
+    if(taskData->balancingEnabled)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = unmuteDischarge(&batteryData);
+        }
     }
 
     // Verify command counter after freeze commands
@@ -467,8 +484,17 @@ static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData
         // Cell temps
         for(uint32_t j = 0; j < NUM_CELL_TEMP_ADCS; j++)
         {
-            taskData->bmb[i].cellTemp[(j * 2) + cellOffset] = lookup(batteryData.cellMonitor[i].auxVoltage[j], &cellMonTempTable);
-            taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = GOOD;
+            float cellTemp = lookup(batteryData.cellMonitor[i].auxVoltage[j], &cellMonTempTable);
+            taskData->bmb[i].cellTemp[(j * 2) + cellOffset] = cellTemp;
+
+            if(fequals(cellTemp, MIN_TEMP_SENSOR_VALUE_C) || fequals(cellTemp, MAX_TEMP_SENSOR_VALUE_C))
+            {
+                taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = BAD;
+            }
+            else
+            {
+                taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = GOOD;
+            }
         }
 
         // Board temp
@@ -547,7 +573,14 @@ static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *task
 
     // Cell monitor data: all cell voltages translated to floats
     // Pack monitor data: raw current sensor uV, pack voltage, raw current counter uV, raw pack voltage counter uV
-    status = readCellVoltages(&batteryData, FILTERED_CELL_VOLTAGE);
+    if(taskData->balancingEnabled)
+    {
+        status = readCellVoltages(&batteryData, RAW_CELL_VOLTAGE);
+    }
+    else
+    {
+        status = readCellVoltages(&batteryData, FILTERED_CELL_VOLTAGE);
+    }
 
     // Filter and assign all voltages to task data struct
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
@@ -558,6 +591,14 @@ static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *task
             taskData->bmb[i].cellVoltage[j] = batteryData.cellMonitor[i].cellVoltage[j];
             taskData->bmb[i].cellVoltageStatus[j] = GOOD;
 
+            // if(fequals(taskData->bmb[i].cellVoltage[j], CELL_MON_AUX_ADC_OFFSET))
+            // {
+            //     taskData->bmb[i].cellVoltageStatus[j] = BAD;
+            // }
+            // else
+            // {
+            //     taskData->bmb[i].cellVoltageStatus[j] = GOOD;
+            // }
         }
     }
 
@@ -673,6 +714,61 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
         {
             Debug("Chain failed to initialize!\n");
             taskData->chainInitialized = false;
+        }
+    }
+
+    // Set chain status    
+
+    if(taskData->chainInfo.chainStatus == MULTIPLE_CHAIN_BREAK)
+    {
+        uint32_t numBmbsA;
+        uint32_t numBmbsB;
+        if(taskData->chainInfo.packMonitorPort == PORTA)
+        {
+            if(taskData->chainInfo.availableDevices[PORTA] >= 1)
+            {
+                taskData->packMonitorStatus = GOOD;
+            }
+            else
+            {
+                taskData->packMonitorStatus = BAD;
+            }
+
+            numBmbsA = taskData->chainInfo.availableDevices[PORTA] - 1;
+            numBmbsB = taskData->chainInfo.availableDevices[PORTB];
+        }
+        else if(taskData->chainInfo.packMonitorPort == PORTB)
+        {
+            if(taskData->chainInfo.availableDevices[PORTB] >= 1)
+            {
+                taskData->packMonitorStatus = GOOD;
+            }
+            else
+            {
+                taskData->packMonitorStatus = BAD;
+            }
+
+            numBmbsA = taskData->chainInfo.availableDevices[PORTA];
+            numBmbsB = taskData->chainInfo.availableDevices[PORTB] - 1;
+        }
+
+        for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        {
+            if((i < numBmbsA) || (i >= (NUM_CELL_MON_IN_ACCUMULATOR - numBmbsB)))
+            {
+                taskData->bmbStatus[i] = GOOD;
+            }
+            else
+            {
+                taskData->bmbStatus[i] = BAD;
+            }
+        }
+    }
+    else
+    {
+        for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        {
+            taskData->bmbStatus[i] = GOOD;
         }
     }
 

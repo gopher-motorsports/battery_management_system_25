@@ -207,7 +207,10 @@ typedef struct
     bool chainInitialized;
 
 	Cell_Monitor_S bmb[NUM_CELL_MON_IN_ACCUMULATOR];
+    SENSOR_STATUS_E bmbStatus[NUM_CELL_MON_IN_ACCUMULATOR];
+
     Pack_Monitor_S packMonitor;
+    SENSOR_STATUS_E packMonitorStatus;
 
     bool balancingEnabled;
 
