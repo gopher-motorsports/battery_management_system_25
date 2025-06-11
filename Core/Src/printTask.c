@@ -9,6 +9,7 @@
 #include "cmsis_os.h"
 #include <stdio.h>
 #include "GopherCAN.h"
+#include "alerts.h"
 
 /* ==================================================================== */
 /* ============================== STRUCTS ============================= */
@@ -31,6 +32,8 @@ static void printCellVoltages(Cell_Monitor_S* bmb);
 static void printCellTemps(Cell_Monitor_S* bmb);
 static void printCellStats(telemetryTaskData_S* telemetryData);
 static void printCellMonDiag(Cell_Monitor_S* bmb);
+static bool printActiveAlerts(Alert_S** alerts, uint16_t num_alerts);
+
 
 static void printEnergyData(Pack_Monitor_S* packMon);
 static void printPackMonDiag(Pack_Monitor_S* packMon);
@@ -164,6 +167,24 @@ static void printCellMonDiag(Cell_Monitor_S* bmb)
 {
 
 }
+
+static bool printActiveAlerts(Alert_S** alerts, uint16_t num_alerts)
+{
+    bool alertActive = false;
+
+    for (uint16_t i = 0; i < num_alerts; i++) {
+        if (alerts[i]->alertStatus == ALERT_SET) {
+            printf("ALERT: %s\n", alerts[i]->alertName);
+            alertActive = true;
+        } else if (alerts[i]->alertStatus == ALERT_LATCHED) {
+            printf("ALERT: %s LATCHED\n", alerts[i]->alertName);
+            alertActive = true;
+        }
+    }
+
+    return alertActive;
+}
+
 
 static void printEnergyData(Pack_Monitor_S* packMon)
 {
@@ -384,6 +405,15 @@ void runPrintTask()
     //         break;
     // }
 
+    printf("\n");
+    
+    if(!printActiveAlerts(telemetryAlerts, NUM_TELEMETRY_ALERTS)
+    && !printActiveAlerts(statusAlerts, NUM_STATUS_ALERTS)) {
+        printf("NO ALERTS ACTIVE\n");
+    }
+
+    printf("\n");
+
     printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
     // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
@@ -392,7 +422,7 @@ void runPrintTask()
         printf("SDC%lu: %d\n", i, printTaskInputData.statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
     }
 
-    printf("Power Limit: %f\n", chargingPowerLimit.data);
+    printf("Power Limit: %  f\n", chargingPowerLimit.data);
 
     printCharger(chargerStateLocal);
 

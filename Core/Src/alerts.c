@@ -483,4 +483,4 @@ statusAlertCondition statusAlertConditionArray[] =
 // Number of alerts
 const uint32_t NUM_TELEMETRY_ALERTS = sizeof(telemetryAlerts) / sizeof(Alert_S*);
 
-const uint32_t NUM_STATUS_ALERTS = sizeof(statusAlerts) / sizeof(Alert_S);
+const uint32_t NUM_STATUS_ALERTS = sizeof(statusAlerts) / sizeof(Alert_S*);
