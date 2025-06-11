@@ -161,6 +161,9 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
+        batteryData.cellMonitor[i].configGroupA.referenceOn = 1;
+        batteryData.cellMonitor[i].configGroupA.digitalFilterSetting = FILTER_CUTOFF_10_HZ;
+
         batteryData.cellMonitor[i].configGroupA.gpo1State = 1;
         batteryData.cellMonitor[i].configGroupA.gpo2State = 1;
         batteryData.cellMonitor[i].configGroupA.gpo3State = 1;
@@ -258,23 +261,17 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
         status = unfreezeRegisters(&batteryData);
     }
 
-    // vTaskSuspendAll();
-
     // Freeze read registers for new read cycle
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
         status = freezeRegisters(&batteryData);
     }
 
+    // Update local conversion phase counter timer
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
         conversionCounterBuffer[TIMER_INDEX][counterBufferIndex] = __HAL_TIM_GetCounter(&htim5);
     }
-
-    // xTaskResumeAll();
-
-    // Update conversion timer
-    // updateTimer(&taskData->packMonitor.localPhaseCountTimer);
 
     // Verify command counter after freeze commands
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
@@ -292,6 +289,7 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData)
     // Record the last phase count stored in the static battery data struct. 0 on init
     uint32_t lastPhaseCount = batteryData.packMonitor.statusGroupC.conversionCounter1;
 
+    // Update all status registers
     status = readStatusA(&batteryData);
 
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
@@ -306,22 +304,34 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData)
 
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
+        // Check for reset pack monitor
+        if(batteryData.packMonitor.statusGroupC.resetDetected)
+        {
+            // Reset conversion counter buffer
+            memset(conversionCounterBuffer[COUNTER_INDEX], 0, (CONVERSION_BUFFER_SIZE * sizeof(uint32_t)));
+            // counterBufferIndex = 0;
+
+            return TRANSACTION_POR_ERROR;
+        }
+
+        for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        {
+            // Check for sleepy BMBs
+            if(batteryData.cellMonitor[i].statusGroupC.sleepDetected)
+            {
+                return TRANSACTION_POR_ERROR;
+            }
+        }
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
         status = readStatusD(&batteryData);
     }
 
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
         status = readStatusE(&batteryData);
-    }
-
-    // Check for reset pack monitor
-    if(batteryData.packMonitor.statusGroupC.resetDetected)
-    {
-        // Reset conversion counter buffer
-        memset(conversionCounterBuffer[COUNTER_INDEX], 0, (CONVERSION_BUFFER_SIZE * sizeof(uint32_t)));
-        // counterBufferIndex = 0;
-
-        return TRANSACTION_POR_ERROR;
     }
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
@@ -488,7 +498,6 @@ static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData
     taskData->packMonitor.dischargeTemp = lookup(batteryData.packMonitor.auxVoltage[DISCHARGE_TEMP_AUX_INDEX], &packMonTempTable);
     taskData->packMonitor.dischargeTempStatus = GOOD;
 
-    // TODO SET DIFF ADC
     // Link voltage
     // Link+ and Link- measured referenced to 1.25v ref, subtract to get link voltage
     float linkVoltage = LINK_DIVIDER_INV_GAIN * (batteryData.packMonitor.auxVoltage[LINK_PLUS_AUX_INDEX] - batteryData.packMonitor.auxVoltage[LINK_MINUS_AUX_INDEX]);
