@@ -682,7 +682,7 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
-        batteryData.cellMonitor[i].configGroupB.dischargeTimeoutMinutes = 10;
+        batteryData.cellMonitor[i].configGroupB.dischargeTimeoutMinutes = 1;
 
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
