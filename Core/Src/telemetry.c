@@ -54,7 +54,7 @@
 
 #define CONVERSION_BUFFER_SIZE          100
 
-#define DISCHARGE_PWM                   50.0f
+#define DISCHARGE_PWM                   80.0f
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -662,18 +662,33 @@ static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData)
 
 static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData)
 {
-    float balanceThreshold = ((taskData->maxCellVoltage - taskData->minCellVoltage) / 2.0f) + taskData->minCellVoltage;
+    static float currentMinVoltage = 0.0f;
+    static bool minVoltageSet = false;
+
+    if(taskData->balancingEnabled)
+    {
+        if(!minVoltageSet)
+        {
+            currentMinVoltage = taskData->minCellVoltage;
+            minVoltageSet = true;
+        }
+    }
+    else
+    {
+        minVoltageSet = false;
+    }
+
+    // float balanceThreshold = ((taskData->maxCellVoltage - taskData->minCellVoltage) / 2.0f) + taskData->minCellVoltage;
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
-
         batteryData.cellMonitor[i].configGroupB.dischargeTimeoutMinutes = 10;
 
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
             bool balancingDis = !(taskData->balancingEnabled);
             bool cellBad = (taskData->bmb[i].cellVoltageStatus[j] != GOOD);
-            bool lowCell = taskData->bmb[i].cellVoltage[j] < balanceThreshold; 
+            bool lowCell = taskData->bmb[i].cellVoltage[j] <= currentMinVoltage; 
             if(balancingDis || cellBad || lowCell)
             {
                 batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
