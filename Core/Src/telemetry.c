@@ -662,7 +662,7 @@ static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData)
 
 static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData)
 {
-    float balanceThreshold = (taskData->maxCellVoltage - taskData->minCellVoltage) / 2.0f;
+    float balanceThreshold = ((taskData->maxCellVoltage - taskData->minCellVoltage) / 2.0f) + taskData->minCellVoltage;
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
