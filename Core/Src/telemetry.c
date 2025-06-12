@@ -54,7 +54,7 @@
 
 #define CONVERSION_BUFFER_SIZE          100
 
-#define DISCHARGE_PWM                   100.0f
+#define DISCHARGE_PWM                   50.0f
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -224,7 +224,7 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         return status;
     }
 
-    status = startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
+    status = startCellConversions(&batteryData, NON_REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
@@ -666,6 +666,9 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
+
+        batteryData.cellMonitor[i].configGroupB.dischargeTimeoutMinutes = 10;
+
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
             bool balancingDis = !(taskData->balancingEnabled);
@@ -673,20 +676,27 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
             bool lowCell = taskData->bmb[i].cellVoltage[j] < balanceThreshold; 
             if(balancingDis || cellBad || lowCell)
             {
-                // batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
-                batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
+                batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
+                // batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
                 taskData->bmb[i].cellBalancingActive[j] = false;
             }
             else
             {
-                // batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
-                batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
+                batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
+                // batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
                 taskData->bmb[i].cellBalancingActive[j] = true;
             }
         }
     }
 
-    return writeConfigB(&batteryData);
+    TRANSACTION_STATUS_E status = writeConfigB(&batteryData);
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
+        status = writePwmRegisters(&batteryData);
+    }
+
+    return status;
 }
 
 /* ==================================================================== */
