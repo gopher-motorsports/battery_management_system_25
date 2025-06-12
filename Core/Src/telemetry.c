@@ -54,6 +54,8 @@
 
 #define CONVERSION_BUFFER_SIZE          100
 
+#define DISCHARGE_PWM                   100.0f
+
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
 /* ==================================================================== */
@@ -90,6 +92,7 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData);
+static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
@@ -221,7 +224,7 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         return status;
     }
 
-    status = startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
+    status = startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_PERMITTED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
@@ -657,6 +660,29 @@ static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData)
     return status;
 }
 
+static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData)
+{
+    for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+    {
+        for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+        {
+            bool balancingDis = !taskData->balancingEnabled;
+            bool cellBad = (taskData->bmb[i].cellVoltageStatus[j] != GOOD);
+            bool lowestCell = (fequals(taskData->bmb[i].cellVoltage[j], taskData->minCellVoltage));
+            if(balancingDis || cellBad || lowestCell)
+            {
+                batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
+            }
+            else
+            {
+                batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
+            }
+        }
+    }
+
+    return writePwmRegisters(&batteryData);
+}
+
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
@@ -696,6 +722,11 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
 
             // Update SOC
             updateSocSoe(&taskData->packMonitor.socData, taskData->minCellVoltage);
+        }
+
+        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            telemetryStatus = runCommandBlock(updateBalancingSwitches, taskData);
         }
     }
 
