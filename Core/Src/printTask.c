@@ -64,11 +64,25 @@ static void printCellVoltages(telemetryTaskData_S* telemetryData)
             {
                 if((telemetryData->bmb[j].cellVoltage[i] < 0.0f) || telemetryData->bmb[j].cellVoltage[i] >= 100.0f)
                 {
-                    printf("  %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
+                    if(telemetryData->bmb[i].cellBalancingActive[j])
+                    {
+                        printf("  %5.3f*  |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
+                    else
+                    {
+                        printf("  %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
                 }
                 else
                 {
-                    printf("   %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
+                    if(telemetryData->bmb[i].cellBalancingActive[j])
+                    {
+                        printf("   %5.3f*  |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
+                    else
+                    {
+                        printf("   %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
                 }
             }
             else

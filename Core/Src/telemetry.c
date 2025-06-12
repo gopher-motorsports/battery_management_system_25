@@ -672,10 +672,12 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
             if(balancingDis || cellBad || lowestCell)
             {
                 batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
+                taskData->bmb[i].cellBalancingActive[j] = false;
             }
             else
             {
                 batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
+                taskData->bmb[i].cellBalancingActive[j] = true;
             }
         }
     }

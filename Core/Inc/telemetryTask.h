@@ -59,6 +59,9 @@ typedef struct
     float cellVoltage[NUM_CELLS_PER_CELL_MONITOR];
     SENSOR_STATUS_E cellVoltageStatus[NUM_CELLS_PER_CELL_MONITOR];
 
+    // Balancing switch closed
+    bool cellBalancingActive[NUM_CELLS_PER_CELL_MONITOR];
+
     // Cell temp array
     float cellTemp[NUM_CELLS_PER_CELL_MONITOR];
     SENSOR_STATUS_E cellTempStatus[NUM_CELLS_PER_CELL_MONITOR];
