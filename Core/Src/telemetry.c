@@ -662,14 +662,16 @@ static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData)
 
 static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData)
 {
+    float balanceThreshold = (taskData->maxCellVoltage - taskData->minCellVoltage) / 2.0f;
+
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
             bool balancingDis = !(taskData->balancingEnabled);
             bool cellBad = (taskData->bmb[i].cellVoltageStatus[j] != GOOD);
-            bool lowestCell = (fequals(taskData->bmb[i].cellVoltage[j], taskData->minCellVoltage));
-            if(balancingDis || cellBad || lowestCell)
+            bool lowCell = taskData->bmb[i].cellVoltage[j] < balanceThreshold; 
+            if(balancingDis || cellBad || lowCell)
             {
                 // batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
                 batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
