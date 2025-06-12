@@ -263,7 +263,7 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
         if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
         {
             status = muteDischarge(&batteryData);
-            vTaskDelay(2);
+            vTaskDelay(10);
         }
     } 
 
