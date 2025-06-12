@@ -224,7 +224,7 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         return status;
     }
 
-    status = startCellConversions(&batteryData, NON_REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
+    status = startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
@@ -666,23 +666,25 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
     {
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
-            bool balancingDis = !taskData->balancingEnabled;
+            bool balancingDis = !(taskData->balancingEnabled);
             bool cellBad = (taskData->bmb[i].cellVoltageStatus[j] != GOOD);
             bool lowestCell = (fequals(taskData->bmb[i].cellVoltage[j], taskData->minCellVoltage));
             if(balancingDis || cellBad || lowestCell)
             {
-                batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
+                // batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
+                batteryData.cellMonitor[i].configGroupB.dischargeCell[j];
                 taskData->bmb[i].cellBalancingActive[j] = false;
             }
             else
             {
-                batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
+                // batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
+                batteryData.cellMonitor[i].configGroupB.dischargeCell[j];
                 taskData->bmb[i].cellBalancingActive[j] = true;
             }
         }
     }
 
-    return writePwmRegisters(&batteryData);
+    return writeConfigB(&batteryData);
 }
 
 /* ==================================================================== */
