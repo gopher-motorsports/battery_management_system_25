@@ -54,7 +54,7 @@
 
 #define CONVERSION_BUFFER_SIZE          100
 
-#define DISCHARGE_PWM                   80.0f
+#define DISCHARGE_PWM                   100.0f
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -263,7 +263,7 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
         if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
         {
             status = muteDischarge(&batteryData);
-            vTaskDelay(10);
+            vTaskDelay(2);
         }
     } 
 
