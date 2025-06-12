@@ -678,18 +678,8 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
         minVoltageSet = false;
     }
 
-    // float balanceThreshold = ((taskData->maxCellVoltage - taskData->minCellVoltage) / 2.0f) + taskData->minCellVoltage;
-
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
-        if(taskData->balancingEnabled)
-        {
-            batteryData.cellMonitor[i].configGroupB.dischargeTimeoutMinutes = 1;
-        }
-        else
-        {
-            batteryData.cellMonitor[i].configGroupB.dischargeTimeoutMinutes = 0;
-        }
 
         for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
         {
@@ -698,27 +688,20 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
             bool lowCell = taskData->bmb[i].cellVoltage[j] <= currentMinVoltage; 
             if(balancingDis || cellBad || lowCell)
             {
-                batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
-                // batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
+                // batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
+                batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
                 taskData->bmb[i].cellBalancingActive[j] = false;
             }
             else
             {
-                batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
-                // batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
+                // batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
+                batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
                 taskData->bmb[i].cellBalancingActive[j] = true;
             }
         }
     }
 
-    TRANSACTION_STATUS_E status = writeConfigB(&batteryData);
-
-    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
-    {
-        status = writePwmRegisters(&batteryData);
-    }
-
-    return status;
+    return writeConfigB(&batteryData);
 }
 
 /* ==================================================================== */
