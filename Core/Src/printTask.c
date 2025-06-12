@@ -28,8 +28,8 @@ extern TIM_HandleTypeDef htim5;
 /* ==================================================================== */
 
 // static void printTestData(Cell_Monitor_S* bmb);
-static void printCellVoltages(Cell_Monitor_S* bmb);
-static void printCellTemps(Cell_Monitor_S* bmb);
+static void printCellVoltages(telemetryTaskData_S* telemetryData);
+static void printCellTemps(telemetryTaskData_S* telemetryData);
 static void printCellStats(telemetryTaskData_S* telemetryData);
 static void printCellMonDiag(Cell_Monitor_S* bmb);
 static bool printActiveAlerts(Alert_S** alerts, uint16_t num_alerts);
@@ -46,7 +46,7 @@ static void printCharger(CHARGER_STATE_E chargerState);
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
 
-static void printCellVoltages(Cell_Monitor_S* bmb)
+static void printCellVoltages(telemetryTaskData_S* telemetryData)
 {
     printf("Cell Voltage:\n");
     printf("|   CELL   |");
@@ -60,15 +60,15 @@ static void printCellVoltages(Cell_Monitor_S* bmb)
         printf("|    %02ld    |", i+1);
         for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
         {
-            if(bmb[j].cellVoltageStatus[i] == GOOD)
+            if((telemetryData->bmb[j].cellVoltageStatus[i] == GOOD) && (telemetryData->bmbStatus[j] == GOOD))
             {
-                if((bmb[j].cellVoltage[i] < 0.0f) || bmb[j].cellVoltage[i] >= 100.0f)
+                if((telemetryData->bmb[j].cellVoltage[i] < 0.0f) || telemetryData->bmb[j].cellVoltage[i] >= 100.0f)
                 {
-                    printf("  %5.3f   |", bmb[j].cellVoltage[i]);
+                    printf("  %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
                 }
                 else
                 {
-                    printf("   %5.3f   |", bmb[j].cellVoltage[i]);
+                    printf("   %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
                 }
             }
             else
@@ -81,7 +81,7 @@ static void printCellVoltages(Cell_Monitor_S* bmb)
 	printf("\n");
 }
 
-static void printCellTemps(Cell_Monitor_S* bmb)
+static void printCellTemps(telemetryTaskData_S* telemetryData)
 {
     printf("Cell Temp:\n");
     printf("|   BMB    |");
@@ -95,15 +95,15 @@ static void printCellTemps(Cell_Monitor_S* bmb)
         printf("|    %02ld    |", i+1);
         for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
         {
-            if(bmb[j].cellTempStatus[i] == GOOD)
+            if((telemetryData->bmb[j].cellTempStatus[i] == GOOD) && (telemetryData->bmbStatus[j] == GOOD))
             {
-                if((bmb[j].cellTemp[i] < 0.0f) || bmb[j].cellTemp[i] >= 100.0f)
+                if((telemetryData->bmb[j].cellTemp[i] < 0.0f) || telemetryData->bmb[j].cellTemp[i] >= 100.0f)
                 {
-                    printf("   %3.1f   |", (double)bmb[j].cellTemp[i]);
+                    printf("   %3.1f   |", (double)telemetryData->bmb[j].cellTemp[i]);
                 }
                 else
                 {
-                    printf("    %3.1f   |", (double)bmb[j].cellTemp[i]);
+                    printf("    %3.1f   |", (double)telemetryData->bmb[j].cellTemp[i]);
                 }
             }
             else
@@ -116,15 +116,15 @@ static void printCellTemps(Cell_Monitor_S* bmb)
     printf("|  Board   |");
     for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
     {
-        if(bmb[j].boardTempStatus == GOOD)
+        if((telemetryData->bmb[j].boardTempStatus == GOOD) && (telemetryData->bmbStatus[j] == GOOD))
         {
-            if((bmb[j].boardTemp < 0.0f) || bmb[j].boardTemp >= 100.0f)
+            if((telemetryData->bmb[j].boardTemp < 0.0f) || telemetryData->bmb[j].boardTemp >= 100.0f)
             {
-                printf("   %3.1f   |", (double)bmb[j].boardTemp);
+                printf("   %3.1f   |", (double)telemetryData->bmb[j].boardTemp);
             }
             else
             {
-                printf("    %3.1f   |", (double)bmb[j].boardTemp);
+                printf("    %3.1f   |", (double)telemetryData->bmb[j].boardTemp);
             }
             // printf("  %04X", gBms.bmb[j].cellVoltage[i]);
         }
@@ -358,8 +358,8 @@ void runPrintTask()
     printf("\e[1;1H\e[2J");
 
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
-    printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    printCellVoltages(&printTaskInputData.telemetryTaskData);
+    printCellTemps(&printTaskInputData.telemetryTaskData);
     // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
     // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
     // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
