@@ -24,6 +24,35 @@ typedef enum
 } CHARGER_STATE_E;
 
 /* ==================================================================== */
+/* ============================== STRUCTS ============================= */
+/* ==================================================================== */
+
+typedef struct __attribute__((packed))
+{
+    uint8_t chargerHardwareFailure : 1;
+    uint8_t chargerOverTemp : 1;
+    uint8_t chargerWrongInputVoltage : 1;
+    uint8_t chargerNoBatteryDetected : 1;
+    uint8_t chargerNoComms : 1;
+    uint8_t reserved : 3;
+} chargerStatus_S;
+
+typedef struct
+{
+    CHARGER_STATE_E chargerState;
+
+    float chargerPowerLimit;
+
+    float chargerVoltageSetpoint;
+    float chargerCurrentSetpoint;
+
+    float chargerVoltage;
+    float chargerCurrent;
+
+    chargerStatus_S chargerStatus;
+} chargerTaskData_S;
+
+/* ==================================================================== */
 /* =================== GLOBAL FUNCTION DECLARATIONS =================== */
 /* ==================================================================== */
 

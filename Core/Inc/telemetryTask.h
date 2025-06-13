@@ -216,6 +216,7 @@ typedef struct
     SENSOR_STATUS_E packMonitorStatus;
 
     bool balancingEnabled;
+    float balancingFloor;
 
     CHAIN_INFO_S chainInfo;
 
@@ -224,6 +225,8 @@ typedef struct
     float maxCellVoltage;
     float minCellVoltage;
     float avgCellVoltage;
+
+    float cellImbalance;
 
     float maxCellTemp;
     float minCellTemp;

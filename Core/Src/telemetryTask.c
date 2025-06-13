@@ -835,7 +835,7 @@ void runTelemetryTask()
     // Copy in last cycles data into local data struct
     vTaskSuspendAll();
     telemetryTaskDataLocal = telemetryTaskData;
-    telemetryTaskDataLocal.balancingEnabled = ((chargerState == CHARGER_STATE_BALANCING) || FORCE_BALANCING_ON);
+    telemetryTaskDataLocal.balancingEnabled = ((chargerTaskData.chargerState == CHARGER_STATE_BALANCING) || FORCE_BALANCING_ON);
     xTaskResumeAll();
 
     TRANSACTION_STATUS_E telemetryStatus = updateBatteryTelemetry(&telemetryTaskDataLocal);

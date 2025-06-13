@@ -10,6 +10,7 @@
 #include "cellData.h"
 #include "packData.h"
 #include <stdlib.h>
+#include <string.h>
 
 /* ==================================================================== */
 /* ============================= DEFINES ============================== */
@@ -40,13 +41,14 @@
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */
 /* ==================================================================== */
 
-static float getMaxChargerCurrent(float packVoltage);
+static float getPowerLimit();
+static float getCurrentLimit(float powerLimit, float packVoltage);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
 
-static float getMaxChargerCurrent(float packVoltage)
+static float getPowerLimit()
 {
     // Calculate the power limit
     float powerLimit = DEFAULT_POWER_LIMIT_W;
@@ -65,6 +67,11 @@ static float getMaxChargerCurrent(float packVoltage)
         }
     }
 
+    return powerLimit;
+}
+
+static float getCurrentLimit(float powerLimit, float packVoltage)
+{
     // Calculate the current request
     float currentLimit = powerLimit / packVoltage;
 
@@ -92,22 +99,30 @@ void initChargerTask()
 
 void runChargerTask()
 {
-    // Input telemetry data
+    // Input telem and charger data
     telemetryTaskData_S telemetryDataLocal;
+    chargerTaskData_S chargerDataLocal;
+
     vTaskSuspendAll();
     telemetryDataLocal = telemetryTaskData;
+    chargerDataLocal = chargerTaskData;
     xTaskResumeAll();
 
     // Check if the charger is connected
     bool chargerConnected = (chargerStatusByte.info.last_rx != 0) && ((HAL_GetTick() - chargerStatusByte.info.last_rx) < ELCON_CHARGER_COMM_TIMEOUT);
 
-    // Charger state machine
-    static CHARGER_STATE_E currentChargerState = CHARGER_STATE_DISCONNECTED;
+    // Get charger power limit
+    chargerDataLocal.chargerPowerLimit = getPowerLimit();
 
-    switch(currentChargerState)
+    // Charger state machine
+
+    switch(chargerDataLocal.chargerState)
     {
         case CHARGER_STATE_DISCONNECTED:
         {
+            chargerDataLocal.chargerVoltageSetpoint = 0.0f;
+            chargerDataLocal.chargerCurrentSetpoint = 0.0f;
+
             if(chargerConnected)
             {
                 if(telemetryDataLocal.maxCellVoltage >= MAX_BRICK_VOLTAGE)
@@ -115,20 +130,20 @@ void runChargerTask()
                     float cellImbalance = (telemetryDataLocal.maxCellVoltage - telemetryDataLocal.minCellVoltage);
                     if(cellImbalance >= CELL_IMBALANCE_THRESHOLD)
                     {
-                        currentChargerState = CHARGER_STATE_BALANCING;
+                        chargerDataLocal.chargerState = CHARGER_STATE_BALANCING;
                     }
                     else
                     {
-                        currentChargerState = CHARGER_STATE_COMPLETE;
+                        chargerDataLocal.chargerState = CHARGER_STATE_COMPLETE;
                     }
                 }
                 else if(telemetryDataLocal.maxCellVoltage >= CELL_VOLTAGE_CV_THRES)
                 {
-                    currentChargerState = CHARGER_STATE_CONSTANT_VOLTAGE;
+                    chargerDataLocal.chargerState = CHARGER_STATE_CONSTANT_VOLTAGE;
                 }
                 else
                 {
-                    currentChargerState = CHARGER_STATE_CONSTANT_CURRENT;
+                    chargerDataLocal.chargerState = CHARGER_STATE_CONSTANT_CURRENT;
                 }
             }
             break;
@@ -136,26 +151,26 @@ void runChargerTask()
         case CHARGER_STATE_CONSTANT_CURRENT:
         {
             // Request max voltage and current under the determined power limit
-            float currentLimit = getMaxChargerCurrent(telemetryDataLocal.packMonitor.packVoltage);
-            sendChargerMessage(MAX_CHARGE_VOLTAGE_V, currentLimit, true);
+            chargerDataLocal.chargerCurrentSetpoint = getCurrentLimit(chargerDataLocal.chargerPowerLimit, telemetryDataLocal.packMonitor.packVoltage);
+            chargerDataLocal.chargerVoltageSetpoint = MAX_CHARGE_VOLTAGE_V;
 
             if(chargerConnected)
             {
                 if(telemetryDataLocal.maxCellVoltage >= CELL_VOLTAGE_CV_THRES)
                 {
-                    currentChargerState = CHARGER_STATE_CONSTANT_VOLTAGE;
+                    chargerDataLocal.chargerState = CHARGER_STATE_CONSTANT_VOLTAGE;
                 }
             }
             else
             {
-                currentChargerState = CHARGER_STATE_DISCONNECTED;
+                chargerDataLocal.chargerState = CHARGER_STATE_DISCONNECTED;
             }
             break;
         }
         case CHARGER_STATE_CONSTANT_VOLTAGE:
         {
             // Request max voltage and current under the determined power limit
-            float currentLimit = getMaxChargerCurrent(MAX_CHARGE_VOLTAGE_V);
+            float currentLimit = getCurrentLimit(chargerDataLocal.chargerPowerLimit, MAX_CHARGE_VOLTAGE_V);
 
             // Get a scaling factor according to difference between highest cell voltage and max cell voltage 
             float deratingFactor = (MAX_BRICK_VOLTAGE - telemetryDataLocal.maxCellVoltage) / (MAX_BRICK_VOLTAGE - CELL_VOLTAGE_CV_THRES);
@@ -168,8 +183,8 @@ void runChargerTask()
                deratingFactor = 0.0f; 
             }
 
-            // Send message to charger
-            sendChargerMessage(MAX_CHARGE_VOLTAGE_V, (deratingFactor * currentLimit), true);
+            chargerDataLocal.chargerCurrentSetpoint = (deratingFactor * currentLimit);
+            chargerDataLocal.chargerVoltageSetpoint = MAX_CHARGE_VOLTAGE_V;
 
             if(chargerConnected)
             {
@@ -178,63 +193,79 @@ void runChargerTask()
                     float cellImbalance = (telemetryDataLocal.maxCellVoltage - telemetryDataLocal.minCellVoltage);
                     if(cellImbalance >= CELL_IMBALANCE_THRESHOLD)
                     {
-                        currentChargerState = CHARGER_STATE_BALANCING;
+                        // Rest?
+                        chargerDataLocal.chargerState = CHARGER_STATE_BALANCING;
                     }
                     else
                     {
-                        currentChargerState = CHARGER_STATE_COMPLETE;
+                        chargerDataLocal.chargerState = CHARGER_STATE_COMPLETE;
                     }
                 }
                 else if(telemetryDataLocal.maxCellVoltage <= (CELL_VOLTAGE_CV_THRES - CELL_VOLTAGE_CV_HYS))
                 {
-                    currentChargerState = CHARGER_STATE_CONSTANT_CURRENT;
+                    chargerDataLocal.chargerState = CHARGER_STATE_CONSTANT_CURRENT;
                 }
             }
             else
             {
-                currentChargerState = CHARGER_STATE_DISCONNECTED;
+                chargerDataLocal.chargerState = CHARGER_STATE_DISCONNECTED;
             }
             break;
         }
         case CHARGER_STATE_BALANCING:
         {
-            // Send message to charger
-            sendChargerMessage(0.0f, 0.0f, false);
+            chargerDataLocal.chargerCurrentSetpoint = 0.0f;
+            chargerDataLocal.chargerVoltageSetpoint = 0.0f;
+            
 
             if(chargerConnected)
             {
                 float cellImbalance = (telemetryDataLocal.maxCellVoltage - telemetryDataLocal.minCellVoltage);
                 if((telemetryDataLocal.maxCellVoltage <= CELL_VOLTAGE_CV_THRES) || (cellImbalance <= CELL_IMBALANCE_THRESHOLD))
                 {
-                    currentChargerState = CHARGER_STATE_CONSTANT_VOLTAGE;
+                    chargerDataLocal.chargerState = CHARGER_STATE_CONSTANT_VOLTAGE;
                 }
             }
             else
             {
-                currentChargerState = CHARGER_STATE_DISCONNECTED;
+                chargerDataLocal.chargerState = CHARGER_STATE_DISCONNECTED;
             }
             break;
         }
         case CHARGER_STATE_COMPLETE:
         {
-            // Send message to charger
-            sendChargerMessage(0.0f, 0.0f, false);
+            chargerDataLocal.chargerCurrentSetpoint = 0.0f;
+            chargerDataLocal.chargerVoltageSetpoint = 0.0f;
 
             if(!chargerConnected)
             {
-                currentChargerState = CHARGER_STATE_DISCONNECTED;
+                chargerDataLocal.chargerState = CHARGER_STATE_DISCONNECTED;
             }
             break;
         }
         default:
         {
-            currentChargerState = CHARGER_STATE_DISCONNECTED;
+            chargerDataLocal.chargerState = CHARGER_STATE_DISCONNECTED;
             break;
         }
     }
 
+    if(chargerDataLocal.chargerState != CHARGER_STATE_DISCONNECTED)
+    {
+        sendChargerMessage(chargerDataLocal.chargerVoltageSetpoint, chargerDataLocal.chargerCurrentSetpoint, true);
+        chargerDataLocal.chargerVoltage = chargerVoltageSetPoint_V.data;
+        chargerDataLocal.chargerCurrent = chargerCurrentSetPoint_A.data;
+        memcpy(&chargerDataLocal.chargerStatus, &chargerStatusByte.data, 1);
+    }
+    else
+    {
+        chargerDataLocal.chargerVoltage = 0.0f;
+        chargerDataLocal.chargerCurrent = 0.0f;
+        memcpy(&chargerDataLocal.chargerStatus, 0x00, 1);
+    }
+
     vTaskSuspendAll();
-    chargerState = currentChargerState;
+    chargerTaskData = chargerDataLocal;
     xTaskResumeAll();
 }
 

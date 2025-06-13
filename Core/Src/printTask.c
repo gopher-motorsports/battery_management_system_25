@@ -6,6 +6,7 @@
 #include "main.h"
 #include "telemetryTask.h"
 #include "statusUpdateTask.h"
+#include "chargerTask.h"
 #include "cmsis_os.h"
 #include <stdio.h>
 #include "GopherCAN.h"
@@ -19,6 +20,7 @@ typedef struct
 {
     telemetryTaskData_S telemetryTaskData;
     statusUpdateTaskData_S statusUpdateTaskData;
+    chargerTaskData_S chargerTaskData;
 } PrintTaskInputData_S;
 
 extern TIM_HandleTypeDef htim5;
@@ -40,7 +42,7 @@ static void printPackMonDiag(Pack_Monitor_S* packMon);
 
 static void printImdData(imdData_S* imdData);
 
-static void printCharger(CHARGER_STATE_E chargerState);
+static void printCharger(chargerTaskData_S* chargerTaskData);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
@@ -298,11 +300,11 @@ static void printImdData(imdData_S* imdData)
     printf("Isolation Resistance (Kohm): %lu\n\n", imdData->isolationResistance);
 }
 
-static void printCharger(CHARGER_STATE_E chargerState)
+static void printCharger(chargerTaskData_S* chargerTaskData)
 {
     printf("\n");
     printf("Charger state: ");
-    switch(chargerState)
+    switch(chargerTaskData->chargerState)
     {
         case CHARGER_STATE_DISCONNECTED:
             printf("DISCONNETED\n");
@@ -324,27 +326,31 @@ static void printCharger(CHARGER_STATE_E chargerState)
             break;
     }
 
-    printf("Charger Voltage %f\n", chargerVoltageSetPoint_V.data);
-    printf("Charger Current %f\n", chargerCurrentSetPoint_A);
+    printf("Charger Power Limit %f\n", chargerTaskData->chargerPowerLimit);
 
-    uint8_t chargerStatus = chargerStatusByte.data;
-    if(chargerStatus & 0x01)
+    printf("Charger Voltage Setpoint %f\n", chargerTaskData->chargerVoltageSetpoint);
+    printf("Charger Voltage %f\n", chargerTaskData->chargerVoltage);
+
+    printf("Charger Current Setpoint %f\n", chargerTaskData->chargerCurrentSetpoint);
+    printf("Charger Current %f\n", chargerTaskData->chargerCurrent);
+
+    if(chargerTaskData->chargerStatus.chargerHardwareFailure)
     {
         printf("Charger hardware Failure\n");
     }
-    if(chargerStatus & 0x02)
+    if(chargerTaskData->chargerStatus.chargerOverTemp)
     {
         printf("Charger Over Temp\n");
     }
-    if(chargerStatus & 0x04)
+    if(chargerTaskData->chargerStatus.chargerWrongInputVoltage)
     {
         printf("Charger Wrong Input Voltage\n");
     }
-    if(chargerStatus & 0x08)
+    if(chargerTaskData->chargerStatus.chargerNoBatteryDetected)
     {
         printf("Charger No Battery\n");
     }
-    if(chargerStatus & 0x10)
+    if(chargerTaskData->chargerStatus.chargerNoComms)
     {
         printf("Charger No Comms\n");
     }
@@ -365,7 +371,7 @@ void runPrintTask()
     vTaskSuspendAll();
     printTaskInputData.telemetryTaskData = telemetryTaskData;
     printTaskInputData.statusUpdateTaskData = statusUpdateTaskData;
-    CHARGER_STATE_E chargerStateLocal = chargerState;
+    printTaskInputData.chargerTaskData = chargerTaskData;
     xTaskResumeAll();
 
     // Clear terminal output
@@ -438,7 +444,7 @@ void runPrintTask()
 
     printf("Power Limit: %  f\n", chargingPowerLimit.data);
 
-    printCharger(chargerStateLocal);
+    printCharger(&printTaskInputData.chargerTaskData);
 
     // printf("SOE: %f\n", soeByOCV_percent.data);
 

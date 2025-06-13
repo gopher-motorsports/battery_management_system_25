@@ -662,20 +662,16 @@ static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData)
 
 static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData)
 {
-    static float currentMinVoltage = 0.0f;
-    static bool minVoltageSet = false;
-
     if(taskData->balancingEnabled)
     {
-        if(!minVoltageSet)
+        if(taskData->minCellVoltage > taskData->balancingFloor)
         {
-            currentMinVoltage = taskData->minCellVoltage;
-            minVoltageSet = true;
+            taskData->balancingFloor = taskData->minCellVoltage;
         }
     }
     else
     {
-        minVoltageSet = false;
+        taskData->balancingFloor = MIN_BRICK_WARNING_VOLTAGE;
     }
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
@@ -685,16 +681,14 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
         {
             bool balancingDis = !(taskData->balancingEnabled);
             bool cellBad = (taskData->bmb[i].cellVoltageStatus[j] != GOOD);
-            bool lowCell = taskData->bmb[i].cellVoltage[j] <= currentMinVoltage; 
+            bool lowCell = taskData->bmb[i].cellVoltage[j] <= taskData->balancingFloor; 
             if(balancingDis || cellBad || lowCell)
             {
-                // batteryData.cellMonitor[i].dischargePWM[j] = 0.0f;
                 batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
                 taskData->bmb[i].cellBalancingActive[j] = false;
             }
             else
             {
-                // batteryData.cellMonitor[i].dischargePWM[j] = DISCHARGE_PWM;
                 batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
                 taskData->bmb[i].cellBalancingActive[j] = true;
             }
@@ -804,7 +798,7 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
             numBmbsB = taskData->chainInfo.availableDevices[PORTB] - 1;
         }
 
-        for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
         {
             if((i < numBmbsA) || (i >= (NUM_CELL_MON_IN_ACCUMULATOR - numBmbsB)))
             {
@@ -818,7 +812,7 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
     }
     else
     {
-        for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
         {
             taskData->bmbStatus[i] = GOOD;
         }

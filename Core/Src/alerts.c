@@ -32,6 +32,11 @@ static bool undervoltageFaultPresent(telemetryTaskData_S* telemetryData)
     return (telemetryData->minCellVoltage < MIN_BRICK_FAULT_VOLTAGE);
 }
 
+static bool cellImbalancePresent(telemetryTaskData_S* telemetryData)
+{
+    return (telemetryData->cellImbalance > MAX_CELL_IMBALANCE_V);
+}
+
 // Status update task
 
 static bool imdSdcFaultPresent(statusUpdateTaskData_S* statusData)
@@ -48,13 +53,6 @@ static bool amsSdcInhibitActive(statusUpdateTaskData_S* statusData)
 {
     return statusData->shutdownCircuitData.bmsInhibitActive;
 }
-
-// static bool cellImbalancePresent(BmbTaskOutputData_S* bmbData)
-// {
-//     const float maxCellImbalanceV = bmbData->maxCellVoltage - bmbData->minCellVoltage;
-
-//     return (maxCellImbalanceV > MAX_CELL_IMBALANCE_V);
-// }
 
 // static bool overtemperatureWarningPresent(BmbTaskOutputData_S* bmbData)
 // {
@@ -308,17 +306,17 @@ Alert_S amsSdcInhibitAlert =
     .numAlertResponse = NUM_AMS_SDC_INHIBIT_RESPONSE, .alertResponse = amsSdcInhibitResponse
 };
 
-// // Cell Imbalance Alert
-// const AlertResponse_E cellImbalanceAlertResponse[] = {LIMP_MODE, DISABLE_CHARGING, DISABLE_BALANCING };
-// #define NUM_CELL_IMBALANCE_ALERT_RESPONSE sizeof(cellImbalanceAlertResponse) / sizeof(AlertResponse_E)
-// Alert_S cellImbalanceAlert = 
-// {
-//     .alertName = "CellImbalance",
-//     .alertStatus = ALERT_CLEARED, .alertTimer = (Timer_S){.timCount = 0, .lastUpdate = 0, .timThreshold = CELL_IMBALANCE_ALERT_SET_TIME_MS}, 
-//     .setTime_MS = CELL_IMBALANCE_ALERT_SET_TIME_MS, .clearTime_MS = CELL_IMBALANCE_ALERT_CLEAR_TIME_MS, 
-//     .alertConditionPresent = false,
-//     .numAlertResponse = NUM_CELL_IMBALANCE_ALERT_RESPONSE, .alertResponse = cellImbalanceAlertResponse
-// };
+// Cell Imbalance Alert
+const AlertResponse_E cellImbalanceAlertResponse[] = {INFO_ONLY};
+#define NUM_CELL_IMBALANCE_ALERT_RESPONSE sizeof(cellImbalanceAlertResponse) / sizeof(AlertResponse_E)
+Alert_S cellImbalanceAlert = 
+{
+    .alertName = "CellImbalance",
+    .alertStatus = ALERT_CLEARED, .alertTimer = (Timer_S){.timCount = 0, .lastUpdate = 0, .timThreshold = CELL_IMBALANCE_ALERT_SET_TIME_MS}, 
+    .setTime_MS = CELL_IMBALANCE_ALERT_SET_TIME_MS, .clearTime_MS = CELL_IMBALANCE_ALERT_CLEAR_TIME_MS, 
+    .alertConditionPresent = false,
+    .numAlertResponse = NUM_CELL_IMBALANCE_ALERT_RESPONSE, .alertResponse = cellImbalanceAlertResponse
+};
 
 // // Overtemperature Warning Alert
 // const AlertResponse_E overtempWarningAlertResponse[] = { LIMP_MODE, DISABLE_CHARGING, DISABLE_BALANCING };
@@ -435,8 +433,8 @@ Alert_S* telemetryAlerts[] =
     &overvoltageWarningAlert,
     &undervoltageWarningAlert,
     &overvoltageFaultAlert,
-    &undervoltageFaultAlert
-    // &cellImbalanceAlert,
+    &undervoltageFaultAlert,
+    &cellImbalanceAlert
     // &overtempWarningAlert,
     // &overtempFaultAlert,
     // &amsSdcFaultAlert,
@@ -460,8 +458,8 @@ telemetryAlertCondition telemetryAlertConditionArray[] =
     overvoltageWarningPresent,
     undervoltageWarningPresent,
     overvoltageFaultPresent,
-    undervoltageFaultPresent
-    // cellImbalancePresent,
+    undervoltageFaultPresent,
+    cellImbalancePresent
     // overtemperatureWarningPresent,
     // overtemperatureFaultPresent,
     // amsSdcFaultPresent,
