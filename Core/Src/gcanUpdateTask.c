@@ -55,6 +55,10 @@ void updateHighFrequencyVariables(GcanTaskInputData_S* gcanData)
     // State of energy
     update_and_queue_param_float(&soeByOCV_percent, gcanData->telemetryTaskData.packMonitor.socData.soeByOcv * 100.0f);
     update_and_queue_param_float(&soeByCoulombCounting_percent, gcanData->telemetryTaskData.packMonitor.socData.soeByCoulombCounting * 100.0f);
+
+    // Flags
+    update_and_queue_param_u8(&imdFault_state, gcanData->statusUpdateTaskData.shutdownCircuitData.imdLatchOpen);
+    update_and_queue_param_u8(&amsFault_state, gcanData->statusUpdateTaskData.shutdownCircuitData.bmsLatchOpen);
 }
 
 void updateMediumFrequencyVariables(GcanTaskInputData_S* gcanData)

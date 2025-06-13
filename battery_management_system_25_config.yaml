@@ -22,7 +22,11 @@ buckets:
                 ADC: NON_ADC
                 sensor: NON_ADC
                 samples_buffered: 1
-            soeByCoulombCounting_percent:
+            amsFault_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            imdFault_state:
                 ADC: NON_ADC
                 sensor: NON_ADC
                 samples_buffered: 1
