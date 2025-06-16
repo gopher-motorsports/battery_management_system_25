@@ -18,10 +18,6 @@ buckets:
                 ADC: NON_ADC
                 sensor: NON_ADC
                 samples_buffered: 1
-            soeByOCV_percent:
-                ADC: NON_ADC
-                sensor: NON_ADC
-                samples_buffered: 1
             amsFault_state:
                 ADC: NON_ADC
                 sensor: NON_ADC
@@ -31,10 +27,117 @@ buckets:
                 sensor: NON_ADC
                 samples_buffered: 1
 
-    # medium_frequency_bms:
-    #     frequency_hz: 10
-    #     parameters: 
-            
+    medium_frequency_bms:
+        frequency_hz: 10
+        parameters: 
+            soeByOCV_percent:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            soeByCoulombCounting_percent:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            maxCellVoltage_V:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            minCellVoltage_V:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            avgCellVoltage_V:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            cellImbalance_mV:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            maxCellTemp_C:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            minCellTemp_C:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            avgCellTemp_C:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            maxBoardTemp_C:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            minBoardTemp_C:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            avgBoardTemp_C:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsNumActiveAlerts_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsCurrAlertIndex_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            overvoltageWarningAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            undervoltageWarningAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            overvoltageFaultAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            undervoltageFaultAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            cellImbalanceAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            overtempWarningAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            overtempFaultAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            badVoltageSenseStatusAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            badBrickTempSenseStatusAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            badBoardTempSenseStatusAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            insufficientTempSensorsAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            telemetryCommunicationAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            packOvercurrentFaultAlert_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
 
     low_frequency_bms:
         frequency_hz: 1

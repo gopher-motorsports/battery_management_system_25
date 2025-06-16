@@ -434,17 +434,17 @@ void runPrintTask()
 
     printf("\n");
 
-    printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
+    // printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
     // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
-    for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)
-    {
-        printf("SDC%lu: %d\n", i, printTaskInputData.statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
-    }
+    // for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)
+    // {
+    //     printf("SDC%lu: %d\n", i, printTaskInputData.statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
+    // }
 
-    printf("Power Limit: %  f\n", chargingPowerLimit.data);
+    // printf("Power Limit: %  f\n", chargingPowerLimit.data);
 
-    printCharger(&printTaskInputData.chargerTaskData);
+    // printCharger(&printTaskInputData.chargerTaskData);
 
     // printf("SOE: %f\n", soeByOCV_percent.data);
 

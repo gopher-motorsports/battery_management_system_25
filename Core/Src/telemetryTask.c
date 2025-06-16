@@ -20,7 +20,7 @@
 /* ============================= DEFINES ============================== */
 /* ==================================================================== */
 
-#define FORCE_BALANCING_ON  1
+#define FORCE_BALANCING_ON  0
 
 // #define FAULT_TOLERANT_TIME_INTERVAL_MS     500
 // #define OPEN_WIRE_SOAK_TIME_MS              40

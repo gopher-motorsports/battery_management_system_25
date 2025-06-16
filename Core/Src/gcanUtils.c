@@ -45,3 +45,20 @@ const FLOAT_CAN_STRUCT *cellStatParams[NUM_CELL_MON_IN_ACCUMULATOR][NUM_STAT_PAR
     {&segment7MaxCellVoltage_V, &segment7MinCellVoltage_V, &segment7AvgCellVoltage_V, &segment7DieTemperature_C, &segment7MaxCellTemperature_C, &segment7MinCellTemperature_C, &segment7AvgCellTemperature_C, &segment7BoardTemperature_C},
     {&segment8MaxCellVoltage_V, &segment8MinCellVoltage_V, &segment8AvgCellVoltage_V, &segment8DieTemperature_C, &segment8MaxCellTemperature_C, &segment8MinCellTemperature_C, &segment8AvgCellTemperature_C, &segment8BoardTemperature_C}
 };
+
+const U8_CAN_STRUCT *bmsAlertsParams[NUM_GCAN_ALERTS] =
+{
+    &overvoltageWarningAlert_state,
+    &undervoltageWarningAlert_state,
+    &overvoltageFaultAlert_state,
+    &undervoltageFaultAlert_state,
+    &cellImbalanceAlert_state,
+    &overtempWarningAlert_state,
+    &overtempFaultAlert_state,
+    &badVoltageSenseStatusAlert_state,
+    &badBrickTempSenseStatusAlert_state,
+    &badBoardTempSenseStatusAlert_state,
+    &insufficientTempSensorsAlert_state,
+    &telemetryCommunicationAlert_state,
+    &packOvercurrentFaultAlert_state
+};
