@@ -59,6 +59,9 @@ typedef struct
     float cellVoltage[NUM_CELLS_PER_CELL_MONITOR];
     SENSOR_STATUS_E cellVoltageStatus[NUM_CELLS_PER_CELL_MONITOR];
 
+    // Balancing switch closed
+    bool cellBalancingActive[NUM_CELLS_PER_CELL_MONITOR];
+
     // Cell temp array
     float cellTemp[NUM_CELLS_PER_CELL_MONITOR];
     SENSOR_STATUS_E cellTempStatus[NUM_CELLS_PER_CELL_MONITOR];
@@ -207,9 +210,13 @@ typedef struct
     bool chainInitialized;
 
 	Cell_Monitor_S bmb[NUM_CELL_MON_IN_ACCUMULATOR];
+    SENSOR_STATUS_E bmbStatus[NUM_CELL_MON_IN_ACCUMULATOR];
+
     Pack_Monitor_S packMonitor;
+    SENSOR_STATUS_E packMonitorStatus;
 
     bool balancingEnabled;
+    float balancingFloor;
 
     CHAIN_INFO_S chainInfo;
 
@@ -218,6 +225,8 @@ typedef struct
     float maxCellVoltage;
     float minCellVoltage;
     float avgCellVoltage;
+
+    float cellImbalance;
 
     float maxCellTemp;
     float minCellTemp;

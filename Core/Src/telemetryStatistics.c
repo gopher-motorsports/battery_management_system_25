@@ -180,6 +180,7 @@ void updateBatteryStatistics(telemetryTaskData_S *taskData)
         taskData->maxCellVoltage = maxCellVoltage;
         taskData->minCellVoltage = minCellVoltage;
         taskData->avgCellVoltage = sumAvgCellVoltage / numGoodBmbsCellV;
+        taskData->cellImbalance = maxCellVoltage - minCellVoltage;
     }
 
     if(numGoodBmbsCellTemp > 0)

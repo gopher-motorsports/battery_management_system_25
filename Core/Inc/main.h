@@ -137,7 +137,7 @@ void Error_Handler(void);
 
 extern telemetryTaskData_S telemetryTaskData;
 extern statusUpdateTaskData_S statusUpdateTaskData;
-extern CHARGER_STATE_E chargerState;
+extern chargerTaskData_S chargerTaskData;
 
 /* USER CODE END Private defines */
 

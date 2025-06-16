@@ -34,6 +34,13 @@
 #define MAX_CELLV_SENSOR_VALUE  6.41505f
 #define MIN_CELLV_SENSOR_VALUE  -3.4152f
 
+// ADC result register encoding
+#define CELL_MON_CELL_ADC_GAIN          0.00015f
+#define CELL_MON_CELL_ADC_OFFSET        1.5f
+
+#define CELL_MON_AUX_ADC_GAIN           0.00015f
+#define CELL_MON_AUX_ADC_OFFSET         1.5f
+
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
 /* ==================================================================== */

@@ -6,6 +6,7 @@
 #include "main.h"
 #include "telemetryTask.h"
 #include "statusUpdateTask.h"
+#include "chargerTask.h"
 #include "cmsis_os.h"
 #include <stdio.h>
 #include "GopherCAN.h"
@@ -19,6 +20,7 @@ typedef struct
 {
     telemetryTaskData_S telemetryTaskData;
     statusUpdateTaskData_S statusUpdateTaskData;
+    chargerTaskData_S chargerTaskData;
 } PrintTaskInputData_S;
 
 extern TIM_HandleTypeDef htim5;
@@ -28,8 +30,8 @@ extern TIM_HandleTypeDef htim5;
 /* ==================================================================== */
 
 // static void printTestData(Cell_Monitor_S* bmb);
-static void printCellVoltages(Cell_Monitor_S* bmb);
-static void printCellTemps(Cell_Monitor_S* bmb);
+static void printCellVoltages(telemetryTaskData_S* telemetryData);
+static void printCellTemps(telemetryTaskData_S* telemetryData);
 static void printCellStats(telemetryTaskData_S* telemetryData);
 static void printCellMonDiag(Cell_Monitor_S* bmb);
 static bool printActiveAlerts(Alert_S** alerts, uint16_t num_alerts);
@@ -40,13 +42,13 @@ static void printPackMonDiag(Pack_Monitor_S* packMon);
 
 static void printImdData(imdData_S* imdData);
 
-static void printCharger(CHARGER_STATE_E chargerState);
+static void printCharger(chargerTaskData_S* chargerTaskData);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
 /* ==================================================================== */
 
-static void printCellVoltages(Cell_Monitor_S* bmb)
+static void printCellVoltages(telemetryTaskData_S* telemetryData)
 {
     printf("Cell Voltage:\n");
     printf("|   CELL   |");
@@ -60,15 +62,29 @@ static void printCellVoltages(Cell_Monitor_S* bmb)
         printf("|    %02ld    |", i+1);
         for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
         {
-            if(bmb[j].cellVoltageStatus[i] == GOOD)
+            if((telemetryData->bmb[j].cellVoltageStatus[i] == GOOD) && (telemetryData->bmbStatus[j] == GOOD))
             {
-                if((bmb[j].cellVoltage[i] < 0.0f) || bmb[j].cellVoltage[i] >= 100.0f)
+                if((telemetryData->bmb[j].cellVoltage[i] < 0.0f) || telemetryData->bmb[j].cellVoltage[i] >= 100.0f)
                 {
-                    printf("  %5.3f   |", bmb[j].cellVoltage[i]);
+                    if(telemetryData->bmb[j].cellBalancingActive[i])
+                    {
+                        printf("  %5.3f*  |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
+                    else
+                    {
+                        printf("  %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
                 }
                 else
                 {
-                    printf("   %5.3f   |", bmb[j].cellVoltage[i]);
+                    if(telemetryData->bmb[j].cellBalancingActive[i])
+                    {
+                        printf("   %5.3f*  |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
+                    else
+                    {
+                        printf("   %5.3f   |", telemetryData->bmb[j].cellVoltage[i]);
+                    }
                 }
             }
             else
@@ -81,7 +97,7 @@ static void printCellVoltages(Cell_Monitor_S* bmb)
 	printf("\n");
 }
 
-static void printCellTemps(Cell_Monitor_S* bmb)
+static void printCellTemps(telemetryTaskData_S* telemetryData)
 {
     printf("Cell Temp:\n");
     printf("|   BMB    |");
@@ -95,15 +111,15 @@ static void printCellTemps(Cell_Monitor_S* bmb)
         printf("|    %02ld    |", i+1);
         for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
         {
-            if(bmb[j].cellTempStatus[i] == GOOD)
+            if((telemetryData->bmb[j].cellTempStatus[i] == GOOD) && (telemetryData->bmbStatus[j] == GOOD))
             {
-                if((bmb[j].cellTemp[i] < 0.0f) || bmb[j].cellTemp[i] >= 100.0f)
+                if((telemetryData->bmb[j].cellTemp[i] < 0.0f) || telemetryData->bmb[j].cellTemp[i] >= 100.0f)
                 {
-                    printf("   %3.1f   |", (double)bmb[j].cellTemp[i]);
+                    printf("   %3.1f   |", (double)telemetryData->bmb[j].cellTemp[i]);
                 }
                 else
                 {
-                    printf("    %3.1f   |", (double)bmb[j].cellTemp[i]);
+                    printf("    %3.1f   |", (double)telemetryData->bmb[j].cellTemp[i]);
                 }
             }
             else
@@ -116,15 +132,15 @@ static void printCellTemps(Cell_Monitor_S* bmb)
     printf("|  Board   |");
     for(int32_t j = 0; j < NUM_CELL_MON_IN_ACCUMULATOR; j++)
     {
-        if(bmb[j].boardTempStatus == GOOD)
+        if((telemetryData->bmb[j].boardTempStatus == GOOD) && (telemetryData->bmbStatus[j] == GOOD))
         {
-            if((bmb[j].boardTemp < 0.0f) || bmb[j].boardTemp >= 100.0f)
+            if((telemetryData->bmb[j].boardTemp < 0.0f) || telemetryData->bmb[j].boardTemp >= 100.0f)
             {
-                printf("   %3.1f   |", (double)bmb[j].boardTemp);
+                printf("   %3.1f   |", (double)telemetryData->bmb[j].boardTemp);
             }
             else
             {
-                printf("    %3.1f   |", (double)bmb[j].boardTemp);
+                printf("    %3.1f   |", (double)telemetryData->bmb[j].boardTemp);
             }
             // printf("  %04X", gBms.bmb[j].cellVoltage[i]);
         }
@@ -284,11 +300,11 @@ static void printImdData(imdData_S* imdData)
     printf("Isolation Resistance (Kohm): %lu\n\n", imdData->isolationResistance);
 }
 
-static void printCharger(CHARGER_STATE_E chargerState)
+static void printCharger(chargerTaskData_S* chargerTaskData)
 {
     printf("\n");
     printf("Charger state: ");
-    switch(chargerState)
+    switch(chargerTaskData->chargerState)
     {
         case CHARGER_STATE_DISCONNECTED:
             printf("DISCONNETED\n");
@@ -310,27 +326,31 @@ static void printCharger(CHARGER_STATE_E chargerState)
             break;
     }
 
-    printf("Charger Voltage %f\n", chargerVoltageSetPoint_V.data);
-    printf("Charger Current %f\n", chargerCurrentSetPoint_A);
+    printf("Charger Power Limit %f\n", chargerTaskData->chargerPowerLimit);
 
-    uint8_t chargerStatus = chargerStatusByte.data;
-    if(chargerStatus & 0x01)
+    printf("Charger Voltage Setpoint %f\n", chargerTaskData->chargerVoltageSetpoint);
+    printf("Charger Voltage %f\n", chargerTaskData->chargerVoltage);
+
+    printf("Charger Current Setpoint %f\n", chargerTaskData->chargerCurrentSetpoint);
+    printf("Charger Current %f\n", chargerTaskData->chargerCurrent);
+
+    if(chargerTaskData->chargerStatus.chargerHardwareFailure)
     {
         printf("Charger hardware Failure\n");
     }
-    if(chargerStatus & 0x02)
+    if(chargerTaskData->chargerStatus.chargerOverTemp)
     {
         printf("Charger Over Temp\n");
     }
-    if(chargerStatus & 0x04)
+    if(chargerTaskData->chargerStatus.chargerWrongInputVoltage)
     {
         printf("Charger Wrong Input Voltage\n");
     }
-    if(chargerStatus & 0x08)
+    if(chargerTaskData->chargerStatus.chargerNoBatteryDetected)
     {
         printf("Charger No Battery\n");
     }
-    if(chargerStatus & 0x10)
+    if(chargerTaskData->chargerStatus.chargerNoComms)
     {
         printf("Charger No Comms\n");
     }
@@ -351,15 +371,15 @@ void runPrintTask()
     vTaskSuspendAll();
     printTaskInputData.telemetryTaskData = telemetryTaskData;
     printTaskInputData.statusUpdateTaskData = statusUpdateTaskData;
-    CHARGER_STATE_E chargerStateLocal = chargerState;
+    printTaskInputData.chargerTaskData = chargerTaskData;
     xTaskResumeAll();
 
     // Clear terminal output
     printf("\e[1;1H\e[2J");
 
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    printCellVoltages(printTaskInputData.telemetryTaskData.bmb);
-    printCellTemps(printTaskInputData.telemetryTaskData.bmb);
+    printCellVoltages(&printTaskInputData.telemetryTaskData);
+    printCellTemps(&printTaskInputData.telemetryTaskData);
     // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
     // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
     // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
@@ -414,17 +434,17 @@ void runPrintTask()
 
     printf("\n");
 
-    printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
+    // printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
     // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
-    for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)
-    {
-        printf("SDC%lu: %d\n", i, printTaskInputData.statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
-    }
+    // for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)
+    // {
+    //     printf("SDC%lu: %d\n", i, printTaskInputData.statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
+    // }
 
-    printf("Power Limit: %  f\n", chargingPowerLimit.data);
+    // printf("Power Limit: %  f\n", chargingPowerLimit.data);
 
-    printCharger(chargerStateLocal);
+    // printCharger(&printTaskInputData.chargerTaskData);
 
     // printf("SOE: %f\n", soeByOCV_percent.data);
 

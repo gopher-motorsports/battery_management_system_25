@@ -111,12 +111,6 @@
 #define VOLTAGE_24BIT_PER_REG       (REGISTER_SIZE_BYTES / VOLTAGE_16BIT_SIZE_BYTES)
 
 // ADC result register encoding
-#define CELL_MON_CELL_ADC_GAIN          0.00015f
-#define CELL_MON_CELL_ADC_OFFSET        1.5f
-
-#define CELL_MON_AUX_ADC_GAIN           0.00015f
-#define CELL_MON_AUX_ADC_OFFSET         1.5f
-
 #define CELL_MON_OV_UV_GAIN             0.0024f
 #define CELL_MON_OV_UV_OFFSET           1.5f
 

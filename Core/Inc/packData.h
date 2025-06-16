@@ -21,6 +21,9 @@
 
 #define SHUNT_RESISTOR_REFERENCE_UV 50.0f
 
+#define ABS_MAX_DISCHARGE_CURRENT_A 250.0f
+#define ABS_MAX_CHARGE_CURRENT_A    15.0f
+
 extern LookupTable_S cellMonTempTable;
 extern LookupTable_S packMonTempTable;
 

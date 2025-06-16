@@ -84,7 +84,7 @@ osStaticThreadDef_t chargerTaskControlBlock;
 
 telemetryTaskData_S telemetryTaskData;
 statusUpdateTaskData_S statusUpdateTaskData;
-CHARGER_STATE_E chargerState;
+chargerTaskData_S chargerTaskData;
 
 volatile bool usDelayActive;
 

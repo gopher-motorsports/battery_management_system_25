@@ -54,6 +54,7 @@
 
 #define CONVERSION_BUFFER_SIZE          100
 
+#define DISCHARGE_PWM                   100.0f
 
 /* ==================================================================== */
 /* ========================= ENUMERATED TYPES========================== */
@@ -91,6 +92,7 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *taskData);
 static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData);
+static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData);
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DEFINITIONS ===================== */
@@ -161,6 +163,9 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     {
+        batteryData.cellMonitor[i].configGroupA.referenceOn = 1;
+        batteryData.cellMonitor[i].configGroupA.digitalFilterSetting = FILTER_CUTOFF_10_HZ;
+
         batteryData.cellMonitor[i].configGroupA.gpo1State = 1;
         batteryData.cellMonitor[i].configGroupA.gpo2State = 1;
         batteryData.cellMonitor[i].configGroupA.gpo3State = 1;
@@ -219,7 +224,7 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
         return status;
     }
 
-    status = startCellConversions(&batteryData, REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
+    status = startCellConversions(&batteryData, NON_REDUNDANT_MODE, CONTINOUS_MODE, DISCHARGE_DISABLED, FILTER_RESET, CELL_OPEN_WIRE_DISABLED);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))
     {
         return status;
@@ -252,13 +257,21 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
     // If a correction occurs, and a POR or command counter error is detected as a result, that will be returned by status
     status = checkChainStatus(&batteryData);
 
+    // If charging is enabled, mute balancing, wait 2ms to ensure a new conversion finishes, then toggle freeze
+    if(taskData->balancingEnabled)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = muteDischarge(&batteryData);
+            vTaskDelay(2);
+        }
+    } 
+
     // Unfreeze read registers
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
         status = unfreezeRegisters(&batteryData);
     }
-
-    // vTaskSuspendAll();
 
     // Freeze read registers for new read cycle
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
@@ -266,15 +279,19 @@ static TRANSACTION_STATUS_E startNewReadCycle(telemetryTaskData_S *taskData)
         status = freezeRegisters(&batteryData);
     }
 
+    // Update local conversion phase counter timer
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
         conversionCounterBuffer[TIMER_INDEX][counterBufferIndex] = __HAL_TIM_GetCounter(&htim5);
     }
 
-    // xTaskResumeAll();
-
-    // Update conversion timer
-    // updateTimer(&taskData->packMonitor.localPhaseCountTimer);
+    if(taskData->balancingEnabled)
+    {
+        if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            status = unmuteDischarge(&batteryData);
+        }
+    }
 
     // Verify command counter after freeze commands
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
@@ -292,6 +309,7 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData)
     // Record the last phase count stored in the static battery data struct. 0 on init
     uint32_t lastPhaseCount = batteryData.packMonitor.statusGroupC.conversionCounter1;
 
+    // Update all status registers
     status = readStatusA(&batteryData);
 
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
@@ -306,22 +324,34 @@ static TRANSACTION_STATUS_E updateDeviceStatus(telemetryTaskData_S *taskData)
 
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
+        // Check for reset pack monitor
+        if(batteryData.packMonitor.statusGroupC.resetDetected)
+        {
+            // Reset conversion counter buffer
+            memset(conversionCounterBuffer[COUNTER_INDEX], 0, (CONVERSION_BUFFER_SIZE * sizeof(uint32_t)));
+            // counterBufferIndex = 0;
+
+            return TRANSACTION_POR_ERROR;
+        }
+
+        for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        {
+            // Check for sleepy BMBs
+            if(batteryData.cellMonitor[i].statusGroupC.sleepDetected)
+            {
+                return TRANSACTION_POR_ERROR;
+            }
+        }
+    }
+
+    if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
+    {
         status = readStatusD(&batteryData);
     }
 
     if((status == TRANSACTION_SUCCESS) || (status == TRANSACTION_CHAIN_BREAK_ERROR))
     {
         status = readStatusE(&batteryData);
-    }
-
-    // Check for reset pack monitor
-    if(batteryData.packMonitor.statusGroupC.resetDetected)
-    {
-        // Reset conversion counter buffer
-        memset(conversionCounterBuffer[COUNTER_INDEX], 0, (CONVERSION_BUFFER_SIZE * sizeof(uint32_t)));
-        // counterBufferIndex = 0;
-
-        return TRANSACTION_POR_ERROR;
     }
 
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
@@ -457,8 +487,17 @@ static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData
         // Cell temps
         for(uint32_t j = 0; j < NUM_CELL_TEMP_ADCS; j++)
         {
-            taskData->bmb[i].cellTemp[(j * 2) + cellOffset] = lookup(batteryData.cellMonitor[i].auxVoltage[j], &cellMonTempTable);
-            taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = GOOD;
+            float cellTemp = lookup(batteryData.cellMonitor[i].auxVoltage[j], &cellMonTempTable);
+            taskData->bmb[i].cellTemp[(j * 2) + cellOffset] = cellTemp;
+
+            if(fequals(cellTemp, MIN_TEMP_SENSOR_VALUE_C) || fequals(cellTemp, MAX_TEMP_SENSOR_VALUE_C))
+            {
+                taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = BAD;
+            }
+            else
+            {
+                taskData->bmb[i].cellTempStatus[(j * 2) + cellOffset] = GOOD;
+            }
         }
 
         // Board temp
@@ -488,7 +527,6 @@ static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData
     taskData->packMonitor.dischargeTemp = lookup(batteryData.packMonitor.auxVoltage[DISCHARGE_TEMP_AUX_INDEX], &packMonTempTable);
     taskData->packMonitor.dischargeTempStatus = GOOD;
 
-    // TODO SET DIFF ADC
     // Link voltage
     // Link+ and Link- measured referenced to 1.25v ref, subtract to get link voltage
     float linkVoltage = LINK_DIVIDER_INV_GAIN * (batteryData.packMonitor.auxVoltage[LINK_PLUS_AUX_INDEX] - batteryData.packMonitor.auxVoltage[LINK_MINUS_AUX_INDEX]);
@@ -538,7 +576,14 @@ static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *task
 
     // Cell monitor data: all cell voltages translated to floats
     // Pack monitor data: raw current sensor uV, pack voltage, raw current counter uV, raw pack voltage counter uV
-    status = readCellVoltages(&batteryData, FILTERED_CELL_VOLTAGE);
+    if(taskData->balancingEnabled)
+    {
+        status = readCellVoltages(&batteryData, RAW_CELL_VOLTAGE);
+    }
+    else
+    {
+        status = readCellVoltages(&batteryData, FILTERED_CELL_VOLTAGE);
+    }
 
     // Filter and assign all voltages to task data struct
     for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
@@ -549,6 +594,14 @@ static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *task
             taskData->bmb[i].cellVoltage[j] = batteryData.cellMonitor[i].cellVoltage[j];
             taskData->bmb[i].cellVoltageStatus[j] = GOOD;
 
+            // if(fequals(taskData->bmb[i].cellVoltage[j], CELL_MON_AUX_ADC_OFFSET))
+            // {
+            //     taskData->bmb[i].cellVoltageStatus[j] = BAD;
+            // }
+            // else
+            // {
+            //     taskData->bmb[i].cellVoltageStatus[j] = GOOD;
+            // }
         }
     }
 
@@ -607,6 +660,44 @@ static TRANSACTION_STATUS_E runDeviceDiagnostics(telemetryTaskData_S *taskData)
     return status;
 }
 
+static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskData)
+{
+    if(taskData->balancingEnabled)
+    {
+        if(taskData->minCellVoltage > taskData->balancingFloor)
+        {
+            taskData->balancingFloor = taskData->minCellVoltage;
+        }
+    }
+    else
+    {
+        taskData->balancingFloor = MIN_BRICK_WARNING_VOLTAGE;
+    }
+
+    for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+    {
+
+        for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+        {
+            bool balancingDis = !(taskData->balancingEnabled);
+            bool cellBad = (taskData->bmb[i].cellVoltageStatus[j] != GOOD);
+            bool lowCell = taskData->bmb[i].cellVoltage[j] <= taskData->balancingFloor; 
+            if(balancingDis || cellBad || lowCell)
+            {
+                batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
+                taskData->bmb[i].cellBalancingActive[j] = false;
+            }
+            else
+            {
+                batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
+                taskData->bmb[i].cellBalancingActive[j] = true;
+            }
+        }
+    }
+
+    return writeConfigB(&batteryData);
+}
+
 /* ==================================================================== */
 /* =================== GLOBAL FUNCTION DEFINITIONS ==================== */
 /* ==================================================================== */
@@ -647,6 +738,11 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
             // Update SOC
             updateSocSoe(&taskData->packMonitor.socData, taskData->minCellVoltage);
         }
+
+        if((telemetryStatus == TRANSACTION_SUCCESS) || (telemetryStatus == TRANSACTION_CHAIN_BREAK_ERROR))
+        {
+            telemetryStatus = runCommandBlock(updateBalancingSwitches, taskData);
+        }
     }
 
     if(!taskData->chainInitialized || (telemetryStatus == TRANSACTION_POR_ERROR))
@@ -664,6 +760,61 @@ TRANSACTION_STATUS_E updateBatteryTelemetry(telemetryTaskData_S *taskData)
         {
             Debug("Chain failed to initialize!\n");
             taskData->chainInitialized = false;
+        }
+    }
+
+    // Set chain status    
+
+    if(taskData->chainInfo.chainStatus == MULTIPLE_CHAIN_BREAK)
+    {
+        uint32_t numBmbsA;
+        uint32_t numBmbsB;
+        if(taskData->chainInfo.packMonitorPort == PORTA)
+        {
+            if(taskData->chainInfo.availableDevices[PORTA] >= 1)
+            {
+                taskData->packMonitorStatus = GOOD;
+            }
+            else
+            {
+                taskData->packMonitorStatus = BAD;
+            }
+
+            numBmbsA = taskData->chainInfo.availableDevices[PORTA] - 1;
+            numBmbsB = taskData->chainInfo.availableDevices[PORTB];
+        }
+        else if(taskData->chainInfo.packMonitorPort == PORTB)
+        {
+            if(taskData->chainInfo.availableDevices[PORTB] >= 1)
+            {
+                taskData->packMonitorStatus = GOOD;
+            }
+            else
+            {
+                taskData->packMonitorStatus = BAD;
+            }
+
+            numBmbsA = taskData->chainInfo.availableDevices[PORTA];
+            numBmbsB = taskData->chainInfo.availableDevices[PORTB] - 1;
+        }
+
+        for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        {
+            if((i < numBmbsA) || (i >= (NUM_CELL_MON_IN_ACCUMULATOR - numBmbsB)))
+            {
+                taskData->bmbStatus[i] = GOOD;
+            }
+            else
+            {
+                taskData->bmbStatus[i] = BAD;
+            }
+        }
+    }
+    else
+    {
+        for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+        {
+            taskData->bmbStatus[i] = GOOD;
         }
     }
 
