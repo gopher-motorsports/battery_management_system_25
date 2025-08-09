@@ -138,6 +138,34 @@ buckets:
                 ADC: NON_ADC
                 sensor: NON_ADC
                 samples_buffered: 1
+            bmsShutdown1_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsShutdown2_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsShutdown3_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsShutdown4_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsShutdown5_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsShutdown6_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
+            bmsInhibitActive_state:
+                ADC: NON_ADC
+                sensor: NON_ADC
+                samples_buffered: 1
 
     low_frequency_bms:
         frequency_hz: 1

@@ -206,28 +206,28 @@ static void printEnergyData(Pack_Monitor_S* packMon)
 {
     printf("Pack current: %f\n", packMon->packCurrent);
     printf("Pack voltage: %f\n", packMon->packVoltage);
-    printf("Pack Power: %f\n", packMon->packPower);
+    // printf("Pack Power: %f\n", packMon->packPower);
 
-    printf("Pack Mon Board Temp: %f\n", packMon->boardTemp);
-    printf("Shunt Temp 1: %f\n", packMon->shuntTemp1);
-    printf("Shunt Temp 2: %f\n", packMon->shuntTemp2);
-    printf("Shunt Resistance uOhm: %f\n", packMon->shuntResistanceMicroOhms);
-    printf("Pre Temp 1: %f\n", packMon->prechargeTemp);
-    printf("Dis Temp 2: %f\n", packMon->dischargeTemp);
+    // printf("Pack Mon Board Temp: %f\n", packMon->boardTemp);
+    // printf("Shunt Temp 1: %f\n", packMon->shuntTemp1);
+    // printf("Shunt Temp 2: %f\n", packMon->shuntTemp2);
+    // printf("Shunt Resistance uOhm: %f\n", packMon->shuntResistanceMicroOhms);
+    // printf("Pre Temp 1: %f\n", packMon->prechargeTemp);
+    // printf("Dis Temp 2: %f\n", packMon->dischargeTemp);
     printf("Link Voltage %f\n\n", packMon->linkVoltage);
 
-    printf("SOC by OCV: %3.1f\n", packMon->socData.socByOcv * 100.0f);
+    // printf("SOC by OCV: %3.1f\n", packMon->socData.socByOcv * 100.0f);
     printf("SOE by OCV: %3.1f\n\n", packMon->socData.soeByOcv * 100.0f);
 
-    printf("Millicoulomb Counter: %lu\n", packMon->socData.milliCoulombCounter);
-    printf("Pack Millicoulombs: %lu\n", packMon->socData.packMilliCoulombs);
-    printf("SOC by CC: %3.1f\n", packMon->socData.socByCoulombCounting * 100.0f);
+    // printf("Millicoulomb Counter: %lu\n", packMon->socData.milliCoulombCounter);
+    // printf("Pack Millicoulombs: %lu\n", packMon->socData.packMilliCoulombs);
+    // printf("SOC by CC: %3.1f\n", packMon->socData.socByCoulombCounting * 100.0f);
     printf("SOE by CC: %3.1f\n\n", packMon->socData.soeByCoulombCounting * 100.0f);
 
-    printf("Conversion Phase Counter: %lu\n", packMon->adcConversionPhaseCounter / 4);
-    printf("Next Valid count: %lu\n", packMon->nextQualifiedPhaseCount / 4);
-    printf("ADC Conversion time ms: %f\n", packMon->adcConversionTimeMS);
-    printf("Local timer: %lu\n", __HAL_TIM_GetCounter(&htim5));
+    // printf("Conversion Phase Counter: %lu\n", packMon->adcConversionPhaseCounter / 4);
+    // printf("Next Valid count: %lu\n", packMon->nextQualifiedPhaseCount / 4);
+    // printf("ADC Conversion time ms: %f\n", packMon->adcConversionTimeMS);
+    // printf("Local timer: %lu\n", __HAL_TIM_GetCounter(&htim5));
 
 }
 
@@ -378,20 +378,20 @@ void runPrintTask()
     printf("\e[1;1H\e[2J");
 
     // printTestData(printTaskInputData.telemetryTaskData.bmb);
-    printCellVoltages(&printTaskInputData.telemetryTaskData);
-    printCellTemps(&printTaskInputData.telemetryTaskData);
+    // printCellVoltages(&printTaskInputData.telemetryTaskData);
+    // printCellTemps(&printTaskInputData.telemetryTaskData);
     // printf("IADC1: %f\n", printTaskInputData.telemetryTaskData.IADC1);
     // printf("IADC2: %f\n", printTaskInputData.telemetryTaskData.IADC2);
     // printf("VBADC1: %f\n", printTaskInputData.telemetryTaskData.VBADC1);
     // printf("VBADC2: %f\n", printTaskInputData.telemetryTaskData.VBADC2);
 
-    // printf("\n");
-    // printf("Max Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.maxCellVoltage);
-    // printf("Min Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.minCellVoltage);
-    // printf("Max Cell Temp: %f\n", printTaskInputData.telemetryTaskData.maxCellTemp);
-    // printf("Min Cell Temp: %f\n", printTaskInputData.telemetryTaskData.minCellTemp);
+    printf("\n");
+    printf("Max Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.maxCellVoltage);
+    printf("Min Cell Voltage: %f\n", printTaskInputData.telemetryTaskData.minCellVoltage);
+    printf("Max Cell Temp: %f\n", printTaskInputData.telemetryTaskData.maxCellTemp);
+    printf("Min Cell Temp: %f\n", printTaskInputData.telemetryTaskData.minCellTemp);
 
-    // printf("\n");
+    printf("\n");
     // printf("SOC by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.socByOcv * 100.0f);
     // printf("SOE by OCV: %f\n", printTaskInputData.telemetryTaskData.socData.soeByOcv * 100.0f);
     // printf("\n");
@@ -434,7 +434,7 @@ void runPrintTask()
 
     printf("\n");
 
-    // printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
+    printEnergyData(&printTaskInputData.telemetryTaskData.packMonitor);
 
     // printImdData(&printTaskInputData.statusUpdateTaskData.imdData);
     // for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)

@@ -62,3 +62,13 @@ const U8_CAN_STRUCT *bmsAlertsParams[NUM_GCAN_ALERTS] =
     &telemetryCommunicationAlert_state,
     &packOvercurrentFaultAlert_state
 };
+
+const U8_CAN_STRUCT *bmsShutdownParams[NUM_SDC_SENSE_INPUTS] =
+{
+    &bmsShutdown1_state,
+    &bmsShutdown2_state,
+    &bmsShutdown3_state,
+    &bmsShutdown4_state,
+    &bmsShutdown5_state,
+    &bmsShutdown6_state
+};

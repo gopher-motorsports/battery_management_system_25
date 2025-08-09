@@ -70,7 +70,7 @@ void updateMediumFrequencyVariables(GcanTaskInputData_S* gcanData)
     update_and_queue_param_float(&maxCellVoltage_V, gcanData->telemetryTaskData.maxCellVoltage);
     update_and_queue_param_float(&minCellVoltage_V, gcanData->telemetryTaskData.minCellVoltage);
     update_and_queue_param_float(&avgCellVoltage_V, gcanData->telemetryTaskData.avgCellVoltage);
-    update_and_queue_param_float(&cellImbalance_mV, gcanData->telemetryTaskData.cellImbalance);
+    update_and_queue_param_float(&cellImbalance_mV, gcanData->telemetryTaskData.cellImbalance * 1000.0f);
     update_and_queue_param_float(&maxCellTemp_C, gcanData->telemetryTaskData.maxCellTemp);
     update_and_queue_param_float(&minCellTemp_C, gcanData->telemetryTaskData.minCellTemp);
     update_and_queue_param_float(&avgCellTemp_C, gcanData->telemetryTaskData.avgCellTemp);
@@ -105,6 +105,14 @@ void updateMediumFrequencyVariables(GcanTaskInputData_S* gcanData)
 
     // update_and_queue_param_u8(&bmsCurrAlertIndex_state, );
 
+    // SDC status
+    for(uint32_t i = 0; i < NUM_SDC_SENSE_INPUTS; i++)
+    {
+        update_and_queue_param_u8(bmsShutdownParams[i], gcanData->statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
+    }
+
+    update_and_queue_param_us(&bmsInhibitActive_state, gcanData->statusUpdateTaskData.shutdownCircuitData.bmsInhibitActive);
+
 
 }
 
@@ -113,11 +121,11 @@ void updateLowFrequencyVariables(GcanTaskInputData_S* gcanData, uint32_t segment
     // Log all segment variables
     // for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
     // {
-        for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
-        {
-            update_and_queue_param_float(cellVoltageParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellVoltage[j]);
-            update_and_queue_param_float(cellTempParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellTemp[j]);
-        }
+        // for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+        // {
+        //     update_and_queue_param_float(cellVoltageParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellVoltage[j]);
+        //     update_and_queue_param_float(cellTempParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellTemp[j]);
+        // }
 
         update_and_queue_param_float(cellStatParams[segmentIndex][0], gcanData->telemetryTaskData.bmb[segmentIndex].maxCellVoltage);
         update_and_queue_param_float(cellStatParams[segmentIndex][1], gcanData->telemetryTaskData.bmb[segmentIndex].minCellVoltage);

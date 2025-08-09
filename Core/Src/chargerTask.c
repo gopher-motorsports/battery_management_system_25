@@ -18,7 +18,7 @@
 
 // Communication timeout ms
 #define ELCON_CHARGER_COMM_TIMEOUT  3000
-#define CHARGER_BOARD_COMM_TIMEOUT  1000
+#define CHARGER_BOARD_COMM_TIMEOUT  10000
 
 // Power limit
 #define DEFAULT_POWER_LIMIT_W       1500.0f

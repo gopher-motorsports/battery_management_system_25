@@ -113,7 +113,7 @@
             "command": "python",
             "args": [
                 "../gophercan-lib/gcan_bootloader/src/gcan_bootloader.py",
-                "go4-24e"
+                "go4-25"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"

@@ -14,7 +14,7 @@
 #define HEARTBEAT_BLINK_MS      300
 #define HEARTBEAT_PERIOD_MS     1000
 
-#define CLEAR_ON_START_MS       11000
+#define CLEAR_ON_START_MS       15000
 
 /* ==================================================================== */
 /* =================== LOCAL FUNCTION DECLARATIONS ==================== */

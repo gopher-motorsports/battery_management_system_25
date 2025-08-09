@@ -664,9 +664,9 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
 {
     if(taskData->balancingEnabled)
     {
-        if(taskData->minCellVoltage > taskData->balancingFloor)
+        if((taskData->minCellVoltage + 0.05f) > taskData->balancingFloor)
         {
-            taskData->balancingFloor = taskData->minCellVoltage;
+            taskData->balancingFloor = (taskData->minCellVoltage + 0.05f);
         }
     }
     else
@@ -682,15 +682,33 @@ static TRANSACTION_STATUS_E updateBalancingSwitches(telemetryTaskData_S *taskDat
             bool balancingDis = !(taskData->balancingEnabled);
             bool cellBad = (taskData->bmb[i].cellVoltageStatus[j] != GOOD);
             bool lowCell = taskData->bmb[i].cellVoltage[j] <= taskData->balancingFloor; 
-            if(balancingDis || cellBad || lowCell)
+
+            bool isCell = ((i == 2) && ((j == 6) || (j == 7)));
+
+            if(balancingDis || cellBad || lowCell || isCell)
             {
                 batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
                 taskData->bmb[i].cellBalancingActive[j] = false;
             }
             else
             {
-                batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
-                taskData->bmb[i].cellBalancingActive[j] = true;
+                static uint32_t overTempTimeout = 0;
+
+                if(taskData->maxCellTemp >= 50.0f || taskData->maxBoardTemp >= 100.0f || taskData->maxDieTemp > 125.0f)
+                {
+                    overTempTimeout = HAL_GetTick() + 60000UL;
+                }
+
+                if(HAL_GetTick() >= overTempTimeout)
+                {
+                    batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = true;
+                    taskData->bmb[i].cellBalancingActive[j] = true;
+                }
+                else
+                {
+                    batteryData.cellMonitor[i].configGroupB.dischargeCell[j] = false;
+                    taskData->bmb[i].cellBalancingActive[j] = false;
+                }
             }
         }
     }

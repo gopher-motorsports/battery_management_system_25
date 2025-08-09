@@ -121,6 +121,11 @@ void updateBatteryStatistics(telemetryTaskData_S *taskData)
 	float sumBoardTemp = 0.0f;
     uint32_t numGoodBoardTemp = 0;
 
+    float maxDieTemp = MIN_TEMP_SENSOR_VALUE_C;
+    float minDieTemp = 200.0f;
+    float sumDieTemp = 0.0f;
+    uint32_t numGoodDieTemp;
+
 	for(int32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
 	{
 		Cell_Monitor_S* pBmb = &taskData->bmb[i];
@@ -170,6 +175,21 @@ void updateBatteryStatistics(telemetryTaskData_S *taskData)
             numGoodBoardTemp++;
             sumBoardTemp += pBmb->boardTemp;
         }
+
+        if(pBmb->dieTempStatus == GOOD)
+        {
+            if (pBmb->dieTemp > maxDieTemp)
+            {
+                maxDieTemp = pBmb->dieTemp;
+            }
+            if (pBmb->dieTemp < minDieTemp)
+            {
+                minDieTemp = pBmb->dieTemp;
+            }
+
+            numGoodDieTemp++;
+            sumDieTemp += pBmb->dieTemp;
+        }
 	}
 
     // TODO: Should i ignore this if bad sensors or open wires?
@@ -195,5 +215,12 @@ void updateBatteryStatistics(telemetryTaskData_S *taskData)
         taskData->maxBoardTemp = maxBoardTemp;
         taskData->minBoardTemp = minBoardTemp;
         taskData->avgBoardTemp = sumBoardTemp / numGoodBoardTemp;
+    }
+
+    if(numGoodDieTemp > 0)
+    {
+        taskData->maxDieTemp = maxDieTemp;
+        taskData->minDieTemp = minDieTemp;
+        taskData->avgDieTemp = sumDieTemp / numGoodDieTemp;
     }
 }

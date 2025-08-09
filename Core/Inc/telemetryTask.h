@@ -236,6 +236,11 @@ typedef struct
     float minBoardTemp;
     float avgBoardTemp;
 
+    float maxDieTemp;
+    float minDieTemp;
+    float avgDieTemp;
+    float numGoodDieTemps;
+
 } telemetryTaskData_S;
 
 /* ==================================================================== */
