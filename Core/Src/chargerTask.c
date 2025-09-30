@@ -21,7 +21,7 @@
 #define CHARGER_BOARD_COMM_TIMEOUT  10000
 
 // Power limit
-#define DEFAULT_POWER_LIMIT_W       1500.0f
+#define DEFAULT_POWER_LIMIT_W       6000.0f
 #define ABSOLUTE_POWER_LIMIT_W      6000.0f
 
 // Voltage limit

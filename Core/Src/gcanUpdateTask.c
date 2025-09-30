@@ -47,13 +47,15 @@ void updateLowFrequencyVariables(GcanTaskInputData_S* gcanData, uint32_t segment
 void updateHighFrequencyVariables(GcanTaskInputData_S* gcanData)
 {
     // Pack current
-    update_and_queue_param_float(&bmsBatteryCurrent_A, gcanData->telemetryTaskData.packMonitor.packCurrent);
+    // update_and_queue_param_float(&bmsBatteryCurrent_A, gcanData->telemetryTaskData.packMonitor.packCurrent);
+    update_and_queue_param_u16(&bmsBatteryCurrent_A, (uint16_t)(gcanData->telemetryTaskData.packMonitor.packCurrent));
 
     // Pack voltage
-    update_and_queue_param_float(&bmsBatteryVoltage_V, gcanData->telemetryTaskData.packMonitor.packVoltage);
+    // update_and_queue_param_float(&bmsBatteryVoltage_V, gcanData->telemetryTaskData.packMonitor.packVoltage);
 
     // Link voltage
-    update_and_queue_param_float(&bmsTractiveSystemVoltage_V, gcanData->telemetryTaskData.packMonitor.linkVoltage);
+    // update_and_queue_param_float(&bmsTractiveSystemVoltage_V, gcanData->telemetryTaskData.packMonitor.linkVoltage);
+    // update_and_queue_param_u16(&bmsTractiveSystemVoltage_V, (uint16_t)(-1.0f * gcanData->telemetryTaskData.packMonitor.linkVoltage));
 
     // Flags
     update_and_queue_param_u8(&imdFault_state, gcanData->statusUpdateTaskData.shutdownCircuitData.imdLatchOpen);
@@ -111,7 +113,7 @@ void updateMediumFrequencyVariables(GcanTaskInputData_S* gcanData)
         update_and_queue_param_u8(bmsShutdownParams[i], gcanData->statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
     }
 
-    update_and_queue_param_us(&bmsInhibitActive_state, gcanData->statusUpdateTaskData.shutdownCircuitData.bmsInhibitActive);
+    update_and_queue_param_u8(&bmsInhibitActive_state, gcanData->statusUpdateTaskData.shutdownCircuitData.bmsInhibitActive);
 
 
 }
