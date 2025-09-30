@@ -32,7 +32,7 @@
 #define LINK_MINUS_AUX_INDEX            5
 
 // Pack monitor hv divider gain
-#define VBAT_DIVIDER_INV_GAIN           247.0f
+#define VBAT_DIVIDER_INV_GAIN           396.6f
 #define LINK_DIVIDER_INV_GAIN           483.353f
 
 // Shunt characteristics
@@ -185,6 +185,9 @@ static TRANSACTION_STATUS_E initChain(telemetryTaskData_S *taskData)
 
     batteryData.packMonitor.configGroupA.gpo1HighZMode = 0;
     batteryData.packMonitor.configGroupA.gpo1State = 1;
+
+    batteryData.packMonitor.configGroupA.gpo2HighZMode = 0;
+    batteryData.packMonitor.configGroupA.gpo2State = 1;
 
     status = writeConfigA(&batteryData);
     if((status != TRANSACTION_SUCCESS) && (status != TRANSACTION_CHAIN_BREAK_ERROR))

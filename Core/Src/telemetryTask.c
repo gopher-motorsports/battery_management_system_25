@@ -825,6 +825,9 @@ void initTelemetryTask()
     vTaskSuspendAll();
     telemetryTaskData.packMonitor.socData = defaultSocInfo;
     xTaskResumeAll();
+
+    HAL_GPIO_WritePin(MST1_GPIO_Port, MST1_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(MST2_GPIO_Port, MST2_Pin, GPIO_PIN_SET);
 }
 
 void runTelemetryTask()
