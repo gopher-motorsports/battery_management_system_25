@@ -4,7 +4,7 @@
 #include "lookupTable.h"
 #include "utils.h"
 
-#define CELL_CAPACITY_MAH           13000.0f
+#define CELL_CAPACITY_MAH           13880.0f
 #define MAX_C_RATING                1
 
 #define CELL_POLARIZATION_REST_SEC  20

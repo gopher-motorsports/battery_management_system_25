@@ -535,7 +535,7 @@ static TRANSACTION_STATUS_E updateAuxPackTelemetry(telemetryTaskData_S *taskData
 
     // TODO add error checking on shunt temp
     // Calculate the shunt resistance
-    float shuntRes = SHUNT_REF_RESISTANCE_UOHM + SHUNT_RESISTANCE_GAIN_UOHM * (taskData->packMonitor.shuntTemp1 - SHUNT_REF_TEMP_C);
+    float shuntRes = SHUNT_REF_RESISTANCE_UOHM; // + SHUNT_RESISTANCE_GAIN_UOHM * (taskData->packMonitor.shuntTemp1 - SHUNT_REF_TEMP_C);
     taskData->packMonitor.shuntResistanceMicroOhms = shuntRes;
 
     // Restart cell monitor AUX adcs
@@ -621,18 +621,22 @@ static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *task
 
     // Problem here where disconnect and reconnect spi
     // Update accumulation data
-    if(taskData->packMonitor.adcConversionPhaseCounter >= taskData->packMonitor.nextQualifiedPhaseCount)
-    {
-        // Calculate next valid conversion phase count
-        taskData->packMonitor.nextQualifiedPhaseCount += (ACCUMULATION_REGISTER_COUNT * PHASE_COUNTS_PER_CONVERSION);
+    // if(taskData->packMonitor.adcConversionPhaseCounter >= taskData->packMonitor.nextQualifiedPhaseCount)
+    // {
+    //     // Calculate next valid conversion phase count
+    //     taskData->packMonitor.nextQualifiedPhaseCount += (ACCUMULATION_REGISTER_COUNT * PHASE_COUNTS_PER_CONVERSION);
 
         // Update coulomb counter
-        float accumulatedCurrent = batteryData.packMonitor.currentAdcAccumulator1uV / (taskData->packMonitor.shuntResistanceMicroOhms);
-        taskData->packMonitor.socData.milliCoulombCounter += (accumulatedCurrent * taskData->packMonitor.adcConversionTimeMS);
+        // float accumulatedCurrent = batteryData.packMonitor.currentAdcAccumulator1uV / (taskData->packMonitor.shuntResistanceMicroOhms);
+        // taskData->packMonitor.socData.milliCoulombCounter += (accumulatedCurrent * taskData->packMonitor.adcConversionTimeMS);
+
+        taskData->packMonitor.socData.milliCoulombCounter += (taskData->packMonitor.packCurrent * (float)TELEMETRY_TASK_PERIOD_MS);
 
         // Update energy counter
-        float accumulatedVoltage = batteryData.packMonitor.batteryVoltageAccumulator1uV / MICROVOLTS_PER_VOLT;
-        taskData->packMonitor.packEnergyMilliJoules += (accumulatedVoltage * accumulatedCurrent * taskData->packMonitor.adcConversionTimeMS);
+        // float accumulatedVoltage = batteryData.packMonitor.batteryVoltageAccumulator1uV / MICROVOLTS_PER_VOLT;
+        // taskData->packMonitor.packEnergyMilliJoules += (accumulatedVoltage * accumulatedCurrent * taskData->packMonitor.adcConversionTimeMS);
+
+        taskData->packMonitor.packEnergyMilliJoules += (taskData->packMonitor.packCurrent * taskData->packMonitor.packVoltage * (float)TELEMETRY_TASK_PERIOD_MS);
 
         // Update soc by ocv qualification timer
         if(abs(batteryData.packMonitor.currentAdcAccumulator1uV) > ACCUMULATED_CURRENT_THRES_UV)
@@ -643,7 +647,7 @@ static TRANSACTION_STATUS_E updatePrimaryPackTelemetry(telemetryTaskData_S *task
         {
             updateTimer(&taskData->packMonitor.socData.socByOcvQualificationTimer);
         }
-    }
+    // }
 
     return status;
 }

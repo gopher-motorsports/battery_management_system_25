@@ -47,8 +47,8 @@ void updateLowFrequencyVariables(GcanTaskInputData_S* gcanData, uint32_t segment
 void updateHighFrequencyVariables(GcanTaskInputData_S* gcanData)
 {
     // Pack current
-    // update_and_queue_param_float(&bmsBatteryCurrent_A, gcanData->telemetryTaskData.packMonitor.packCurrent);
-    update_and_queue_param_u16(&bmsBatteryCurrent_A, (uint16_t)(gcanData->telemetryTaskData.packMonitor.packCurrent));
+    update_and_queue_param_float(&bmsBatteryCurrent_A, gcanData->telemetryTaskData.packMonitor.packCurrent);
+    // update_and_queue_param_u16(&bmsBatteryCurrent_A, (uint16_t)(gcanData->telemetryTaskData.packMonitor.packCurrent));
 
     // Pack voltage
     // update_and_queue_param_float(&bmsBatteryVoltage_V, gcanData->telemetryTaskData.packMonitor.packVoltage);
