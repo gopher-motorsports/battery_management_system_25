@@ -5,6 +5,8 @@
 build/
 cmake/
 CMakeFiles/
+Core/Startup
+Debug/
 
 build.ninja
 cmake_install.cmake
@@ -12,3 +14,7 @@ CMakeCache.txt
 CMakePresets.json
 compile_commands.json
 startup_stm32f446xx.s
+.cproject
+.project
+.settings/
+STM32F446RETX_RAM.ld

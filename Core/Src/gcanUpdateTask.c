@@ -77,7 +77,7 @@ void updateMediumFrequencyVariables(GcanTaskInputData_S* gcanData)
     update_and_queue_param_float(&maxBoardTemp_C, gcanData->telemetryTaskData.maxBoardTemp);
     update_and_queue_param_float(&minBoardTemp_C, gcanData->telemetryTaskData.minBoardTemp);
     update_and_queue_param_float(&avgBoardTemp_C, gcanData->telemetryTaskData.avgBoardTemp);
-
+    update_and_queue_param_float(&bmsShuntTemp_C, gcanData->telemetryTaskData.packMonitor.shuntTemp1);
     // Alerts
 
     uint32_t numAlertsSet = 0;
@@ -111,7 +111,7 @@ void updateMediumFrequencyVariables(GcanTaskInputData_S* gcanData)
         update_and_queue_param_u8(bmsShutdownParams[i], gcanData->statusUpdateTaskData.shutdownCircuitData.sdcSenseFaultActive[i]);
     }
 
-    update_and_queue_param_us(&bmsInhibitActive_state, gcanData->statusUpdateTaskData.shutdownCircuitData.bmsInhibitActive);
+    // update_and_queue_param_u8(&bmsInhibitActive_state, gcanData->statusUpdateTaskData.shutdownCircuitData.bmsInhibitActive);
 
 
 }
@@ -119,13 +119,13 @@ void updateMediumFrequencyVariables(GcanTaskInputData_S* gcanData)
 void updateLowFrequencyVariables(GcanTaskInputData_S* gcanData, uint32_t segmentIndex)
 {
     // Log all segment variables
-    // for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
-    // {
-        // for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
-        // {
-        //     update_and_queue_param_float(cellVoltageParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellVoltage[j]);
-        //     update_and_queue_param_float(cellTempParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellTemp[j]);
-        // }
+    for(uint32_t i = 0; i < NUM_CELL_MON_IN_ACCUMULATOR; i++)
+    {
+        for(uint32_t j = 0; j < NUM_CELLS_PER_CELL_MONITOR; j++)
+        {
+            update_and_queue_param_float(cellVoltageParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellVoltage[j]);
+            update_and_queue_param_float(cellTempParams[segmentIndex][j], gcanData->telemetryTaskData.bmb[segmentIndex].cellTemp[j]);
+        }
 
         update_and_queue_param_float(cellStatParams[segmentIndex][0], gcanData->telemetryTaskData.bmb[segmentIndex].maxCellVoltage);
         update_and_queue_param_float(cellStatParams[segmentIndex][1], gcanData->telemetryTaskData.bmb[segmentIndex].minCellVoltage);
@@ -135,7 +135,7 @@ void updateLowFrequencyVariables(GcanTaskInputData_S* gcanData, uint32_t segment
         update_and_queue_param_float(cellStatParams[segmentIndex][5], gcanData->telemetryTaskData.bmb[segmentIndex].minCellTemp);
         update_and_queue_param_float(cellStatParams[segmentIndex][6], gcanData->telemetryTaskData.bmb[segmentIndex].avgCellTemp);
         update_and_queue_param_float(cellStatParams[segmentIndex][7], gcanData->telemetryTaskData.bmb[segmentIndex].boardTemp);
-    // }
+    }
 }
 
 /* ==================================================================== */
